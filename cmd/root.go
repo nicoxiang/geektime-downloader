@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 
@@ -24,14 +26,17 @@ var Phone string
 var Concurrency int
 var DownloadFolder string
 var userHomeDir string
+var defaultConcurency int
 var l *spinner.Spinner
 
 func init() {
 	userHomeDir, _ = os.UserHomeDir()
+	defaultConcurency = int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
 	downloadFolder := filepath.Join(userHomeDir, util.GeektimeDownloaderFolder)
-	rootCmd.Flags().StringVarP(&Phone, "phone", "u", "", "你的极客时间账号(手机号)")
+	rootCmd.Flags().StringVarP(&Phone, "phone", "u", "", "你的极客时间账号(手机号)(required)")
+	rootCmd.MarkFlagRequired("phone")
 	rootCmd.Flags().StringVarP(&DownloadFolder, "folder", "f", downloadFolder, "PDF 文件下载目标位置")
-	rootCmd.Flags().IntVarP(&Concurrency, "concurrency", "c", 5, "下载文章的并发数")
+	rootCmd.Flags().IntVarP(&Concurrency, "concurrency", "c", defaultConcurency, "下载文章的并发数")
 	l = loader.NewSpinner()
 }
 
@@ -124,7 +129,7 @@ func handleSelectArticle(articles []geektime.ArticleSummary, index int, ctx cont
 	}
 	c := ctx.Value(SelectedColumnPtrKey).(*geektime.ColumnSummary)
 	a := articles[index-1]
-	folder, err := mkColumnDownloadFolder(c.Title)
+	folder, err := mkColumnDownloadFolder(Phone, c.Title)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -142,7 +147,7 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 	c := loadArticles(ctx, client)
 	wp := workerpool.New(Concurrency)
 	var counter uint64
-	folder, err := mkColumnDownloadFolder(c.Title)
+	folder, err := mkColumnDownloadFolder(Phone, c.Title)
 	if err != nil {
 		printErrAndExit(err)
 	}
@@ -179,8 +184,8 @@ func loadArticles(ctx context.Context, client *resty.Client) *geektime.ColumnSum
 	return c
 }
 
-func mkColumnDownloadFolder(columnName string) (string, error) {
-	path := filepath.Join(DownloadFolder, columnName)
+func mkColumnDownloadFolder(phone, columnName string) (string, error) {
+	path := filepath.Join(DownloadFolder, phone, columnName)
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		err := os.MkdirAll(path, os.ModePerm)
 		if err != nil {
