@@ -46,8 +46,7 @@ func FileName(name string, ext string) string {
 func LimitLength(s string, length int) string {
 	ellipses := "..."
 
-	str := []rune(s)
-	if len(str) > length {
+	if str := []rune(s); len(str) > length {
 		s = string(str[:length-len(ellipses)]) + ellipses
 	}
 

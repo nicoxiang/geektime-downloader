@@ -34,7 +34,7 @@ func init() {
 	defaultConcurency = int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
 	downloadFolder := filepath.Join(userHomeDir, util.GeektimeDownloaderFolder)
 	rootCmd.Flags().StringVarP(&Phone, "phone", "u", "", "你的极客时间账号(手机号)(required)")
-	rootCmd.MarkFlagRequired("phone")
+	_ = rootCmd.MarkFlagRequired("phone")
 	rootCmd.Flags().StringVarP(&DownloadFolder, "folder", "f", downloadFolder, "PDF 文件下载目标位置")
 	rootCmd.Flags().IntVarP(&Concurrency, "concurrency", "c", defaultConcurency, "下载文章的并发数")
 	l = loader.NewSpinner()
