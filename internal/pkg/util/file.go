@@ -83,6 +83,9 @@ func ReadCookieFromConfigFile(phone string) ([]*http.Cookie, error) {
 
 			for _, line := range strings.Split(string(data), "\n") {
 				s := strings.SplitN(line, " ", 2)
+				if len(s) != 2 {
+					continue
+				}
 				if s[0] == ExpireConfigLineKey && !checkExpire(s[1]) {
 					err := os.Remove(fullName)
 					return nil, err
