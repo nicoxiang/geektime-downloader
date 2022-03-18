@@ -1,0 +1,43 @@
+release:
+  name_template: "{{ .Version }} - {{ .Date }}"
+  draft: true
+  header: |
+    [![Github Releases ({{ .Tag }})](https://img.shields.io/github/downloads/nicoxiang/geektime-downloader/{{ .Tag }}/total.svg)](https://github.com/nicoxiang/geektime-downloader/releases/latest) [![Github All Releases](https://img.shields.io/github/downloads/nicoxiang/geektime-downloader/total.svg)](https://github.com/nicoxiang/geektime-downloader/releases)
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - 386
+      - amd64
+      - arm
+      - arm64
+    ignore:
+      - goos: windows
+        goarch: arm 
+    flags:
+      - -trimpath  
+    ldflags:
+      - -s -w -X main.version={{ .Version }}     
+archives:
+  -
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - README*
+      - LICENSE*
+      - "*.1"
+checksum:
+  name_template: 'checksums.txt'
+snapshot:
+  name_template: "{{ .Tag }}"
+changelog:
+  sort: desc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
