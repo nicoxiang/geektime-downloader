@@ -7,12 +7,12 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
-type SelectOption struct {
+type selectOption struct {
 	Value int
 	Text  string
 }
 
-var downLoadAllOrSelectArticlesOptions = []SelectOption{
+var downLoadAllOrSelectArticlesOptions = []selectOption{
 	{
 		Value: 0,
 		Text:  "返回上一级",
@@ -27,6 +27,7 @@ var downLoadAllOrSelectArticlesOptions = []SelectOption{
 	},
 }
 
+// Show select promt to choose what to do on selected column
 func PromptSelectDownLoadAllOrSelectArticles(title string) int {
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",

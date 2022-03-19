@@ -8,6 +8,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 )
 
+// Show select promt to choose a column
 func PromptSelectColumn(columns []geektime.ColumnSummary) int {
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",

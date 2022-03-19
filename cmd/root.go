@@ -22,21 +22,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var Phone string
-var Concurrency int
-var DownloadFolder string
-var userHomeDir string
-var defaultConcurency int
-var l *spinner.Spinner
+var (
+	phone          string
+	concurrency    int
+	downloadFolder string
+	l              *spinner.Spinner
+)
 
 func init() {
-	userHomeDir, _ = os.UserHomeDir()
-	defaultConcurency = int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
-	downloadFolder := filepath.Join(userHomeDir, util.GeektimeDownloaderFolder)
-	rootCmd.Flags().StringVarP(&Phone, "phone", "u", "", "你的极客时间账号(手机号)(required)")
+	userHomeDir, _ := os.UserHomeDir()
+	defaultConcurency := int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
+	defaultDownloadFolder := filepath.Join(userHomeDir, util.GeektimeDownloaderFolder)
+	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)(required)")
 	_ = rootCmd.MarkFlagRequired("phone")
-	rootCmd.Flags().StringVarP(&DownloadFolder, "folder", "f", downloadFolder, "PDF 文件下载目标位置")
-	rootCmd.Flags().IntVarP(&Concurrency, "concurrency", "c", defaultConcurency, "下载文章的并发数")
+	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "PDF 文件下载目标位置")
+	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "c", defaultConcurency, "下载文章的并发数")
 	l = loader.NewSpinner()
 }
 
@@ -51,20 +51,20 @@ var rootCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		ctx := context.Background()
 
-		readCookies, err := util.ReadCookieFromConfigFile(Phone)
+		readCookies, err := util.ReadCookieFromConfigFile(phone)
 		if err != nil {
 			printErrAndExit(err)
 		}
 		if readCookies == nil {
 			pwd := prompt.PromptGetPwd()
 			loader.Run(l, "[ 正在登录... ]", func() {
-				errMsg, cookies := geektime.Login(Phone, pwd)
+				errMsg, cookies := geektime.Login(phone, pwd)
 				if errMsg != "" {
 					fmt.Fprintln(os.Stderr, errMsg)
 					os.Exit(1)
 				}
 				readCookies = cookies
-				err := util.WriteCookieToTempFile(Phone, cookies)
+				err := util.WriteCookieToConfigFile(phone, cookies)
 				if err != nil {
 					printErrAndExit(err)
 				}
@@ -88,7 +88,7 @@ var rootCmd = &cobra.Command{
 func selectColumn(ctx context.Context, client *resty.Client) {
 	columns := ctx.Value(ColumnsKey).([]geektime.ColumnSummary)
 	if len(columns) == 0 {
-		if err := util.RemoveConfig(Phone); err != nil {
+		if err := util.RemoveConfig(phone); err != nil {
 			printErrAndExit(err)
 		} else {
 			fmt.Println("当前账户在其他设备登录, 请尝试重新登录")
@@ -103,10 +103,10 @@ func selectColumn(ctx context.Context, client *resty.Client) {
 func handleSelectColumn(ctx context.Context, client *resty.Client) {
 	c := ctx.Value(SelectedColumnPtrKey).(*geektime.ColumnSummary)
 	option := prompt.PromptSelectDownLoadAllOrSelectArticles(c.Title)
-	handleSelectDownloadAll(option, ctx, client)
+	handleSelectDownloadAll(ctx, option, client)
 }
 
-func handleSelectDownloadAll(option int, ctx context.Context, client *resty.Client) {
+func handleSelectDownloadAll(ctx context.Context, option int, client *resty.Client) {
 	switch option {
 	case 0:
 		selectColumn(ctx, client)
@@ -120,16 +120,16 @@ func handleSelectDownloadAll(option int, ctx context.Context, client *resty.Clie
 func selectArticle(ctx context.Context, client *resty.Client) {
 	c := loadArticles(ctx, client)
 	index := prompt.PromptSelectArticles(c.Articles)
-	handleSelectArticle(c.Articles, index, ctx, client)
+	handleSelectArticle(ctx, c.Articles, index, client)
 }
 
-func handleSelectArticle(articles []geektime.ArticleSummary, index int, ctx context.Context, client *resty.Client) {
+func handleSelectArticle(ctx context.Context, articles []geektime.ArticleSummary, index int, client *resty.Client) {
 	if index == 0 {
 		handleSelectColumn(ctx, client)
 	}
 	c := ctx.Value(SelectedColumnPtrKey).(*geektime.ColumnSummary)
 	a := articles[index-1]
-	folder, err := mkColumnDownloadFolder(Phone, c.Title)
+	folder, err := mkColumnDownloadFolder(phone, c.Title)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -145,9 +145,9 @@ func handleSelectArticle(articles []geektime.ArticleSummary, index int, ctx cont
 
 func handleDownloadAll(ctx context.Context, client *resty.Client) {
 	c := loadArticles(ctx, client)
-	wp := workerpool.New(Concurrency)
+	wp := workerpool.New(concurrency)
 	var counter uint64
-	folder, err := mkColumnDownloadFolder(Phone, c.Title)
+	folder, err := mkColumnDownloadFolder(phone, c.Title)
 	if err != nil {
 		printErrAndExit(err)
 	}
@@ -185,7 +185,7 @@ func loadArticles(ctx context.Context, client *resty.Client) *geektime.ColumnSum
 }
 
 func mkColumnDownloadFolder(phone, columnName string) (string, error) {
-	path := filepath.Join(DownloadFolder, phone, columnName)
+	path := filepath.Join(downloadFolder, phone, columnName)
 	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
 		err := os.MkdirAll(path, os.ModePerm)
 		if err != nil {
@@ -195,6 +195,7 @@ func mkColumnDownloadFolder(phone, columnName string) (string, error) {
 	return path, nil
 }
 
+// Main func
 func Execute() {
 	if err := rootCmd.Execute(); err != nil {
 		printErrAndExit(err)

@@ -6,19 +6,21 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
+// Product(column/video) list response body
 type ProductListResponse struct {
 	Code int `json:"code"`
 	Data struct {
 		Products []struct {
-			ID        int `json:"id"`
-			Title         string `json:"title"`
-			Author        struct {
-				Name      string `json:"name"`
+			ID     int    `json:"id"`
+			Title  string `json:"title"`
+			Author struct {
+				Name string `json:"name"`
 			} `json:"author"`
 		} `json:"products"`
 	} `json:"data"`
 }
 
+// Mini column struct
 type ColumnSummary struct {
 	CID        int
 	Title      string
@@ -26,6 +28,7 @@ type ColumnSummary struct {
 	Articles   []ArticleSummary
 }
 
+// Call geektime api to get column list
 func GetColumnList(client *resty.Client) ([]ColumnSummary, error) {
 	result := ProductListResponse{}
 
@@ -60,7 +63,6 @@ func GetColumnList(client *resty.Client) ([]ColumnSummary, error) {
 			})
 		}
 		return products, nil
-	} else {
-		return nil, errors.New("get response failed")
 	}
+	return nil, errors.New("get response failed")
 }

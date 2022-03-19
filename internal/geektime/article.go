@@ -6,21 +6,24 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
+// Article list response body
 type ArticleListResponse struct {
 	Code int `json:"code"`
 	Data struct {
 		List []struct {
-			ID               int    `json:"id"`
-			ArticleTitle     string `json:"article_title"`
+			ID           int    `json:"id"`
+			ArticleTitle string `json:"article_title"`
 		} `json:"list"`
 	} `json:"data"`
 }
 
+// Mini article struct
 type ArticleSummary struct {
 	AID   int
 	Title string
 }
 
+// Call geektime api to get article list
 func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
 	result := ArticleListResponse{}
 	_, err := client.R().
@@ -48,7 +51,6 @@ func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
 			})
 		}
 		return articles, nil
-	} else {
-		return nil, errors.New("get response failed")
 	}
+	return nil, errors.New("get response failed")
 }

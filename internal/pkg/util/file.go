@@ -14,10 +14,16 @@ import (
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
-const MAXLENGTH = 80
-const GeektimeDownloaderFolder = "geektime-downloader"
-const ExpireConfigLineKey = "EXPIRE"
-const ExpireLayout = "Mon, 02 Jan 2006 15:04:05 -0700"
+const (
+	// Max file name length
+	MAXLENGTH                = 80
+	// App config and download root dolder name
+	GeektimeDownloaderFolder = "geektime-downloader"
+	// Expire key in config file 
+	ExpireConfigLineKey      = "EXPIRE"
+	// Expire value layout in config file
+	ExpireLayout             = "Mon, 02 Jan 2006 15:04:05 -0700"
+)
 
 var userConfigDir string
 
@@ -25,6 +31,7 @@ func init() {
 	userConfigDir, _ = os.UserConfigDir()
 }
 
+// Convert a string to a valid safe filename
 func FileName(name string, ext string) string {
 	rep := strings.NewReplacer("\n", " ", "/", " ", "|", "-", ": ", "：", ":", "：", "'", "’", "\t", " ")
 	name = rep.Replace(name)
@@ -36,14 +43,14 @@ func FileName(name string, ext string) string {
 
 	name = strings.TrimSpace(name)
 
-	limitedName := LimitLength(name, MAXLENGTH)
+	limitedName := limitLength(name, MAXLENGTH)
 	if ext != "" {
 		return fmt.Sprintf("%s.%s", limitedName, ext)
 	}
 	return limitedName
 }
 
-func LimitLength(s string, length int) string {
+func limitLength(s string, length int) string {
 	ellipses := "..."
 
 	if str := []rune(s); len(str) > length {
@@ -53,15 +60,15 @@ func LimitLength(s string, length int) string {
 	return s
 }
 
+// Read cookies from app config file, if cookie has expired, delete old config file.
 func ReadCookieFromConfigFile(phone string) ([]*http.Cookie, error) {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
-		} else {
-			return nil, err
 		}
+		return nil, err
 	}
 	if len(files) == 0 {
 		return nil, nil
@@ -103,18 +110,21 @@ func ReadCookieFromConfigFile(phone string) ([]*http.Cookie, error) {
 	return nil, nil
 }
 
-func WriteCookieToTempFile(phone string, cookies []*http.Cookie) error {
+// Write cookies to config file with specified phone prefix file name, 
+// and write cookie 'GCESS' expire date into config too. 
+func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) error {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		return err
 	}
-	if files, err := ioutil.ReadDir(dir); err != nil {
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
 		return err
-	} else {
-		for _, fi := range files {
-			if strings.HasPrefix(fi.Name(), phone) {
-				return nil
-			}
+	}
+	for _, fi := range files {
+		// config file already exists
+		if strings.HasPrefix(fi.Name(), phone) {
+			return nil
 		}
 	}
 	file, err := ioutil.TempFile(dir, phone)
@@ -135,6 +145,7 @@ func WriteCookieToTempFile(phone string, cookies []*http.Cookie) error {
 	return nil
 }
 
+// Remove specified users' config
 func RemoveConfig(phone string) error {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
 	files, err := ioutil.ReadDir(dir)

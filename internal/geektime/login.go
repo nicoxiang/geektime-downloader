@@ -8,6 +8,7 @@ import (
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
+// Login response body
 type LoginResult struct {
 	Code int `json:"code"`
 	Data struct {
@@ -15,11 +16,12 @@ type LoginResult struct {
 		Name string `json:"nickname"`
 	} `json:"data"`
 	Error struct {
-		Code int `json:"code"`
-		Msg string `json:"msg"`
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
 	} `json:"error"`
 }
 
+// Call geektime login api and return auth cookies
 func Login(phone, password string) (string, []*http.Cookie) {
 	client := resty.New().
 		SetTimeout(5*time.Second).
@@ -32,7 +34,7 @@ func Login(phone, password string) (string, []*http.Cookie) {
 	loginResult := LoginResult{}
 
 	loginResponse, err := client.R().
-		SetHeader("Referer", pgt.GeekBangAccount + "/signin?redirect=https%3A%2F%2Ftime.geekbang.org%2F").
+		SetHeader("Referer", pgt.GeekBangAccount+"/signin?redirect=https%3A%2F%2Ftime.geekbang.org%2F").
 		SetBody(
 			map[string]interface{}{
 				"country":   86,
@@ -46,7 +48,7 @@ func Login(phone, password string) (string, []*http.Cookie) {
 
 	if err != nil {
 		return err.Error(), nil
-	}	
+	}
 
 	if loginResult.Code == 0 {
 		var cookies []*http.Cookie
@@ -56,7 +58,6 @@ func Login(phone, password string) (string, []*http.Cookie) {
 			}
 		}
 		return "", cookies
-	} else {
-		return loginResult.Error.Msg, nil
 	}
+	return loginResult.Error.Msg, nil
 }

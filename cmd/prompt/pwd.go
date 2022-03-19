@@ -9,6 +9,7 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
+// Show prompt to let user input password
 func PromptGetPwd() string {
 	validate := func(input string) error {
 		if strings.TrimSpace(input) == "" {

@@ -19,6 +19,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/util"
 )
 
+// Use chromedp to print article page and save
 func PrintArticlePageToPDF(aid int, filename string, cookies []*http.Cookie) error {
 	var buf []byte
 	ctx, cancel := chromedp.NewContext(
@@ -33,7 +34,7 @@ func PrintArticlePageToPDF(aid int, filename string, cookies []*http.Cookie) err
 		chromedp.Tasks{
 			chromedp.Emulate(device.IPadPro11),
 			setCookies(util.CookiesToMap(cookies)),
-			navigateAndWaitFor(pgt.GeekBang + `/column/article/` + strconv.Itoa(aid), "networkIdle"),
+			navigateAndWaitFor(pgt.GeekBang+`/column/article/`+strconv.Itoa(aid), "networkIdle"),
 			// chromedp.Navigate(pgt.GeekBang + `/column/article/` + strconv.Itoa(aid)),
 			// chromedp.ActionFunc(func(ctx context.Context) error {
 			// 	time.Sleep(time.Second * 5)
