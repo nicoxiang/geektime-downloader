@@ -2,7 +2,14 @@
 
 geektime-downloader 目前支持下载专栏为PDF文档。
 
+[![go report card](https://goreportcard.com/badge/github.com/nicoxiang/geektime-downloader "go report card")](https://goreportcard.com/report/github.com/nicoxiang/geektime-downloader)
+[![MIT license](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
+
 ## Usage
+
+### Prerequisites
+
+Chrome installed
 
 ### Install form source
 
