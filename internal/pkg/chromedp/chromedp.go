@@ -19,7 +19,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/util"
 )
 
-// Use chromedp to print article page and save
+// PrintArticlePageToPDF use chromedp to print article page and save
 func PrintArticlePageToPDF(aid int, filename string, cookies []*http.Cookie) error {
 	var buf []byte
 	ctx, cancel := chromedp.NewContext(

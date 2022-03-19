@@ -2,7 +2,7 @@ package util
 
 import "net/http"
 
-// Convert cookies to map
+// CookiesToMap convert cookies to map
 func CookiesToMap(cookies []*http.Cookie) map[string]string {
 	cookieMap := make(map[string]string, len(cookies))
 	for _, c := range cookies {

@@ -6,7 +6,7 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-// Article list response body
+// ArticleListResponse is article list response body
 type ArticleListResponse struct {
 	Code int `json:"code"`
 	Data struct {
@@ -17,13 +17,13 @@ type ArticleListResponse struct {
 	} `json:"data"`
 }
 
-// Mini article struct
+// ArticleSummary Mini article struct
 type ArticleSummary struct {
 	AID   int
 	Title string
 }
 
-// Call geektime api to get article list
+// GetArticles call geektime api to get article list
 func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
 	result := ArticleListResponse{}
 	_, err := client.R().

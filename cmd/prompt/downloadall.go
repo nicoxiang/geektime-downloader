@@ -27,8 +27,8 @@ var downLoadAllOrSelectArticlesOptions = []selectOption{
 	},
 }
 
-// Show select promt to choose what to do on selected column
-func PromptSelectDownLoadAllOrSelectArticles(title string) int {
+// SelectDownLoadAllOrSelectArticles show select promt to choose what to do on selected column
+func SelectDownLoadAllOrSelectArticles(title string) int {
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
 		Active:   "\U00002714 {{ .Text | red }}",

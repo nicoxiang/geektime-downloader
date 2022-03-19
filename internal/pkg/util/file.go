@@ -15,13 +15,13 @@ import (
 )
 
 const (
-	// Max file name length
+	// MAXLENGTH Max file name length
 	MAXLENGTH                = 80
-	// App config and download root dolder name
+	// GeektimeDownloaderFolder app config and download root dolder name
 	GeektimeDownloaderFolder = "geektime-downloader"
-	// Expire key in config file 
+	// ExpireConfigLineKey in config file 
 	ExpireConfigLineKey      = "EXPIRE"
-	// Expire value layout in config file
+	// ExpireLayout in config file
 	ExpireLayout             = "Mon, 02 Jan 2006 15:04:05 -0700"
 )
 
@@ -31,7 +31,7 @@ func init() {
 	userConfigDir, _ = os.UserConfigDir()
 }
 
-// Convert a string to a valid safe filename
+// FileName convert a string to a valid safe filename
 func FileName(name string, ext string) string {
 	rep := strings.NewReplacer("\n", " ", "/", " ", "|", "-", ": ", "：", ":", "：", "'", "’", "\t", " ")
 	name = rep.Replace(name)
@@ -60,7 +60,7 @@ func limitLength(s string, length int) string {
 	return s
 }
 
-// Read cookies from app config file, if cookie has expired, delete old config file.
+// ReadCookieFromConfigFile read cookies from app config file, if cookie has expired, delete old config file.
 func ReadCookieFromConfigFile(phone string) ([]*http.Cookie, error) {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
 	files, err := ioutil.ReadDir(dir)
@@ -110,7 +110,7 @@ func ReadCookieFromConfigFile(phone string) ([]*http.Cookie, error) {
 	return nil, nil
 }
 
-// Write cookies to config file with specified phone prefix file name, 
+// WriteCookieToConfigFile write cookies to config file with specified phone prefix file name, 
 // and write cookie 'GCESS' expire date into config too. 
 func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) error {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
@@ -145,7 +145,7 @@ func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) error {
 	return nil
 }
 
-// Remove specified users' config
+// RemoveConfig remove specified users' config
 func RemoveConfig(phone string) error {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
 	files, err := ioutil.ReadDir(dir)

@@ -8,7 +8,7 @@ import (
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
-// Login response body
+// LoginResult is login response body
 type LoginResult struct {
 	Code int `json:"code"`
 	Data struct {
@@ -21,7 +21,7 @@ type LoginResult struct {
 	} `json:"error"`
 }
 
-// Call geektime login api and return auth cookies
+// Login call geektime login api and return auth cookies
 func Login(phone, password string) (string, []*http.Cookie) {
 	client := resty.New().
 		SetTimeout(5*time.Second).

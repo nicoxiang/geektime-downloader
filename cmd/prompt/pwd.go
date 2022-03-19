@@ -9,8 +9,8 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
-// Show prompt to let user input password
-func PromptGetPwd() string {
+// GetPwd show prompt to let user input password
+func GetPwd() string {
 	validate := func(input string) error {
 		if strings.TrimSpace(input) == "" {
 			return errors.New("密码不能为空")

@@ -8,8 +8,8 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 )
 
-// Show select promt to choose an article
-func PromptSelectArticles(articles []geektime.ArticleSummary) int {
+// SelectArticles show select promt to choose an article
+func SelectArticles(articles []geektime.ArticleSummary) int {
 	var items []geektime.ArticleSummary
 	back := geektime.ArticleSummary{
 		AID:   -1,
