@@ -49,5 +49,5 @@ func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
 		}
 		return articles, nil
 	}
-	return nil, errors.New("Call geektime articles api failed")
+	return nil, errors.New("call geektime articles api failed")
 }

@@ -9,7 +9,6 @@ import (
 
 // SelectDownLoadAllOrSelectArticles show select promt to choose what to do on selected column
 func SelectDownLoadAllOrSelectArticles(title string) int {
-
 	var options = []struct {
 		Text  string
 	}{

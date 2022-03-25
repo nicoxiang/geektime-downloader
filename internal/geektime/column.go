@@ -65,5 +65,5 @@ func GetColumnList(client *resty.Client) ([]ColumnSummary, error) {
 		}
 		return products, nil
 	}
-	return nil, errors.New("Call geektime product api failed")
+	return nil, errors.New("call geektime product api failed")
 }
