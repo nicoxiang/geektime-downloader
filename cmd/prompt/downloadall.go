@@ -7,28 +7,17 @@ import (
 	"github.com/manifoldco/promptui"
 )
 
-type selectOption struct {
-	Value int
-	Text  string
-}
-
-var downLoadAllOrSelectArticlesOptions = []selectOption{
-	{
-		Value: 0,
-		Text:  "返回上一级",
-	},
-	{
-		Value: 1,
-		Text:  "下载当前专栏所有文章",
-	},
-	{
-		Value: 2,
-		Text:  "选择文章",
-	},
-}
-
 // SelectDownLoadAllOrSelectArticles show select promt to choose what to do on selected column
 func SelectDownLoadAllOrSelectArticles(title string) int {
+
+	var options = []struct {
+		Text  string
+	}{
+		{"返回上一级"},
+		{"下载当前专栏所有文章"},
+		{"选择文章"},
+	}
+
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
 		Active:   "\U00002714 {{ .Text | red }}",
@@ -37,9 +26,9 @@ func SelectDownLoadAllOrSelectArticles(title string) int {
 
 	prompt := promptui.Select{
 		Label:        fmt.Sprintf("当前选中的专栏为: %s, 请继续选择：", title),
-		Items:        downLoadAllOrSelectArticlesOptions,
+		Items:        options,
 		Templates:    templates,
-		Size:         len(downLoadAllOrSelectArticlesOptions),
+		Size:         len(options),
 		HideSelected: true,
 	}
 

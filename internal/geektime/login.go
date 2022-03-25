@@ -8,19 +8,6 @@ import (
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
-// LoginResult is login response body
-type LoginResult struct {
-	Code int `json:"code"`
-	Data struct {
-		UID  int    `json:"uid"`
-		Name string `json:"nickname"`
-	} `json:"data"`
-	Error struct {
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-	} `json:"error"`
-}
-
 // Login call geektime login api and return auth cookies
 func Login(phone, password string) (string, []*http.Cookie) {
 	client := resty.New().
@@ -31,7 +18,17 @@ func Login(phone, password string) (string, []*http.Cookie) {
 		SetHeader("Connection", "keep-alive").
 		SetBaseURL(pgt.GeekBangAccount)
 
-	loginResult := LoginResult{}
+	var result struct {
+		Code int `json:"code"`
+		Data struct {
+			UID  int    `json:"uid"`
+			Name string `json:"nickname"`
+		} `json:"data"`
+		Error struct {
+			Code int    `json:"code"`
+			Msg  string `json:"msg"`
+		} `json:"error"`
+	}
 
 	loginResponse, err := client.R().
 		SetHeader("Referer", pgt.GeekBangAccount+"/signin?redirect=https%3A%2F%2Ftime.geekbang.org%2F").
@@ -43,14 +40,14 @@ func Login(phone, password string) (string, []*http.Cookie) {
 				"cellphone": phone,
 				"password":  password,
 			}).
-		SetResult(&loginResult).
+		SetResult(&result).
 		Post("/account/ticket/login")
 
 	if err != nil {
 		return err.Error(), nil
 	}
 
-	if loginResult.Code == 0 {
+	if result.Code == 0 {
 		var cookies []*http.Cookie
 		for _, c := range loginResponse.Cookies() {
 			if c.Name == "GCID" || c.Name == "GCESS" || c.Name == "SERVERID" {
@@ -59,5 +56,5 @@ func Login(phone, password string) (string, []*http.Cookie) {
 		}
 		return "", cookies
 	}
-	return loginResult.Error.Msg, nil
+	return result.Error.Msg, nil
 }

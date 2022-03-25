@@ -16,7 +16,6 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/device"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/util"
 )
 
 // PrintArticlePageToPDF use chromedp to print article page and save
@@ -33,7 +32,7 @@ func PrintArticlePageToPDF(aid int, filename string, cookies []*http.Cookie) err
 	err := chromedp.Run(ctx,
 		chromedp.Tasks{
 			chromedp.Emulate(device.IPadPro11),
-			setCookies(util.CookiesToMap(cookies)),
+			setCookies(cookiesToMap(cookies)),
 			navigateAndWaitFor(pgt.GeekBang+`/column/article/`+strconv.Itoa(aid), "networkIdle"),
 			// chromedp.Navigate(pgt.GeekBang + `/column/article/` + strconv.Itoa(aid)),
 			// chromedp.ActionFunc(func(ctx context.Context) error {
@@ -88,6 +87,14 @@ func setCookies(cookies map[string]string) chromedp.ActionFunc {
 		}
 		return nil
 	})
+}
+
+func cookiesToMap(cookies []*http.Cookie) map[string]string {
+	cookieMap := make(map[string]string, len(cookies))
+	for _, c := range cookies {
+		cookieMap[c.Name] = c.Value
+	}
+	return cookieMap
 }
 
 func navigateAndWaitFor(url string, eventName string) chromedp.ActionFunc {

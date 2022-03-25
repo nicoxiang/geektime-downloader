@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -23,10 +22,12 @@ import (
 )
 
 var (
-	phone          string
-	concurrency    int
-	downloadFolder string
-	l              *spinner.Spinner
+	phone              string
+	concurrency        int
+	downloadFolder     string
+	l                  *spinner.Spinner
+	columns            []geektime.ColumnSummary
+	currentColumnIndex int
 )
 
 func init() {
@@ -40,17 +41,10 @@ func init() {
 	l = loader.NewSpinner()
 }
 
-type rootContextKey string
-
-const columnsKey rootContextKey = "columns"
-const selectedColumnPtrKey rootContextKey = "selectedColumnPtr"
-
 var rootCmd = &cobra.Command{
 	Use:   "geektime-downloader",
 	Short: "Geektime-downloader is used to download geek time lessons",
 	Run: func(cmd *cobra.Command, args []string) {
-		ctx := context.Background()
-
 		readCookies, err := util.ReadCookieFromConfigFile(phone)
 		if err != nil {
 			printErrAndExit(err)
@@ -74,19 +68,18 @@ var rootCmd = &cobra.Command{
 		client := geektime.NewTimeGeekRestyClient(readCookies)
 
 		loader.Run(l, "[ 正在加载已购买专栏列表... ]", func() {
-			columns, err := geektime.GetColumnList(client)
-			ctx = context.WithValue(ctx, columnsKey, columns)
+			c, err := geektime.GetColumnList(client)
 			if err != nil {
 				printErrAndExit(err)
 			}
+			columns = c
 		})
 
-		selectColumn(ctx, client)
+		selectColumn(client)
 	},
 }
 
-func selectColumn(ctx context.Context, client *resty.Client) {
-	columns := ctx.Value(columnsKey).([]geektime.ColumnSummary)
+func selectColumn(client *resty.Client) {
 	if len(columns) == 0 {
 		if err := util.RemoveConfig(phone); err != nil {
 			printErrAndExit(err)
@@ -95,41 +88,38 @@ func selectColumn(ctx context.Context, client *resty.Client) {
 			os.Exit(1)
 		}
 	}
-	selectedColumnIndex := prompt.SelectColumn(columns)
-	ctx = context.WithValue(ctx, selectedColumnPtrKey, &columns[selectedColumnIndex])
-	handleSelectColumn(ctx, client)
+	currentColumnIndex = prompt.SelectColumn(columns)
+	handleSelectColumn(client)
 }
 
-func handleSelectColumn(ctx context.Context, client *resty.Client) {
-	c := ctx.Value(selectedColumnPtrKey).(*geektime.ColumnSummary)
-	option := prompt.SelectDownLoadAllOrSelectArticles(c.Title)
-	handleSelectDownloadAll(ctx, option, client)
+func handleSelectColumn(client *resty.Client) {
+	option := prompt.SelectDownLoadAllOrSelectArticles(columns[currentColumnIndex].Title)
+	handleSelectDownloadAll(option, client)
 }
 
-func handleSelectDownloadAll(ctx context.Context, option int, client *resty.Client) {
+func handleSelectDownloadAll(option int, client *resty.Client) {
 	switch option {
 	case 0:
-		selectColumn(ctx, client)
+		selectColumn(client)
 	case 1:
-		handleDownloadAll(ctx, client)
+		handleDownloadAll(client)
 	case 2:
-		selectArticle(ctx, client)
+		selectArticle(client)
 	}
 }
 
-func selectArticle(ctx context.Context, client *resty.Client) {
-	c := loadArticles(ctx, client)
-	index := prompt.SelectArticles(c.Articles)
-	handleSelectArticle(ctx, c.Articles, index, client)
+func selectArticle(client *resty.Client) {
+	articles := loadArticles(client)
+	index := prompt.SelectArticles(articles)
+	handleSelectArticle(articles, index, client)
 }
 
-func handleSelectArticle(ctx context.Context, articles []geektime.ArticleSummary, index int, client *resty.Client) {
+func handleSelectArticle(articles []geektime.ArticleSummary, index int, client *resty.Client) {
 	if index == 0 {
-		handleSelectColumn(ctx, client)
+		handleSelectColumn(client)
 	}
-	c := ctx.Value(selectedColumnPtrKey).(*geektime.ColumnSummary)
 	a := articles[index-1]
-	folder, err := mkColumnDownloadFolder(phone, c.Title)
+	folder, err := mkColumnDownloadFolder(phone, columns[currentColumnIndex].Title)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
@@ -140,22 +130,23 @@ func handleSelectArticle(ctx context.Context, articles []geektime.ArticleSummary
 			printErrAndExit(err)
 		}
 	})
-	selectArticle(ctx, client)
+	selectArticle(client)
 }
 
-func handleDownloadAll(ctx context.Context, client *resty.Client) {
-	c := loadArticles(ctx, client)
+func handleDownloadAll(client *resty.Client) {
+	cTitle := columns[currentColumnIndex].Title
+	articles := loadArticles(client)
 	wp := workerpool.New(concurrency)
 	var counter uint64
-	folder, err := mkColumnDownloadFolder(phone, c.Title)
+	folder, err := mkColumnDownloadFolder(phone, cTitle)
 	if err != nil {
 		printErrAndExit(err)
 	}
-	for _, a := range c.Articles {
+	for _, a := range articles {
 		aid := a.AID
 		title := a.Title
 		wp.Submit(func() {
-			prefix := fmt.Sprintf("[ 正在下载专栏 《%s》 中的所有文章, 已完成下载%d/%d ... ]", c.Title, counter, len(c.Articles))
+			prefix := fmt.Sprintf("[ 正在下载专栏 《%s》 中的所有文章, 已完成下载%d/%d ... ]", cTitle, counter, len(articles))
 			loader.Run(l, prefix, func() {
 				err := chromedp.PrintArticlePageToPDF(aid, filepath.Join(folder, util.FileName(title, "pdf")), client.Cookies)
 				if err != nil {
@@ -167,21 +158,21 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 		})
 	}
 	wp.StopWait()
-	selectColumn(ctx, client)
+	selectColumn(client)
 }
 
-func loadArticles(ctx context.Context, client *resty.Client) *geektime.ColumnSummary {
-	c := ctx.Value(selectedColumnPtrKey).(*geektime.ColumnSummary)
+func loadArticles(client *resty.Client) []geektime.ArticleSummary {
+	c := columns[currentColumnIndex]
 	if len(c.Articles) <= 0 {
 		loader.Run(l, "[ 正在加载文章列表...]", func() {
 			articles, err := geektime.GetArticles(strconv.Itoa(c.CID), client)
 			if err != nil {
 				printErrAndExit(err)
 			}
-			c.Articles = articles
+			columns[currentColumnIndex].Articles = articles
 		})
 	}
-	return c
+	return columns[currentColumnIndex].Articles
 }
 
 func mkColumnDownloadFolder(phone, columnName string) (string, error) {

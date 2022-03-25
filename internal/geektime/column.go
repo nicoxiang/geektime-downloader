@@ -6,20 +6,6 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-// ProductListResponse is product(column/video) list response body
-type ProductListResponse struct {
-	Code int `json:"code"`
-	Data struct {
-		Products []struct {
-			ID     int    `json:"id"`
-			Title  string `json:"title"`
-			Author struct {
-				Name string `json:"name"`
-			} `json:"author"`
-		} `json:"products"`
-	} `json:"data"`
-}
-
 // ColumnSummary Mini column struct
 type ColumnSummary struct {
 	CID        int
@@ -30,7 +16,22 @@ type ColumnSummary struct {
 
 // GetColumnList call geektime api to get column list
 func GetColumnList(client *resty.Client) ([]ColumnSummary, error) {
-	result := ProductListResponse{}
+	var result struct {
+		Code int `json:"code"`
+		Data struct {
+			Products []struct {
+				ID     int    `json:"id"`
+				Title  string `json:"title"`
+				Author struct {
+					Name string `json:"name"`
+				} `json:"author"`
+			} `json:"products"`
+		} `json:"data"`
+		Error struct {
+			Code int    `json:"code"`
+			Msg  string `json:"msg"`
+		} `json:"error"`
+	}
 
 	client.SetHeader("Referer", "https://time.geekbang.org/dashboard/course")
 	_, err := client.R().
@@ -64,5 +65,5 @@ func GetColumnList(client *resty.Client) ([]ColumnSummary, error) {
 		}
 		return products, nil
 	}
-	return nil, errors.New("get response failed")
+	return nil, errors.New("Call geektime product api failed")
 }
