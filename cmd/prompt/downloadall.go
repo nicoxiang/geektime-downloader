@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -10,11 +11,12 @@ import (
 // SelectDownLoadAllOrSelectArticles show select promt to choose what to do on selected column
 func SelectDownLoadAllOrSelectArticles(title string) int {
 	var options = []struct {
-		Text  string
+		Text string
+		Value int
 	}{
-		{"返回上一级"},
-		{"下载当前专栏所有文章"},
-		{"选择文章"},
+		{"返回上一级", 0},
+		{"下载当前专栏所有文章", 1},
+		{"选择文章", 2},
 	}
 
 	templates := &promptui.SelectTemplates{
@@ -34,7 +36,9 @@ func SelectDownLoadAllOrSelectArticles(title string) int {
 	index, _, err := prompt.Run()
 
 	if err != nil {
-		fmt.Printf("Prompt failed %v\n", err)
+		if !errors.Is(err, promptui.ErrInterrupt) {
+			fmt.Printf("Prompt failed %v\n", err)
+		}
 		os.Exit(1)
 	}
 	return index

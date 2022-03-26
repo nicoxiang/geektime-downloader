@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -27,7 +28,9 @@ func SelectColumn(columns []geektime.ColumnSummary) int {
 	index, _, err := prompt.Run()
 
 	if err != nil {
-		fmt.Printf("Prompt failed %v\n", err)
+		if !errors.Is(err, promptui.ErrInterrupt) {
+			fmt.Printf("Prompt failed %v\n", err)
+		}
 		os.Exit(1)
 	}
 	return index

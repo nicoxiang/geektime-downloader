@@ -1,6 +1,7 @@
 package prompt
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
@@ -10,12 +11,12 @@ import (
 
 // SelectArticles show select promt to choose an article
 func SelectArticles(articles []geektime.ArticleSummary) int {
-	var items []geektime.ArticleSummary
-	back := geektime.ArticleSummary{
-		AID:   -1,
-		Title: "返回上一级",
+	items := []geektime.ArticleSummary{
+		{
+			AID:   -1,
+			Title: "返回上一级",
+		},
 	}
-	items = append(items, back)
 	items = append(items, articles...)
 
 	templates := &promptui.SelectTemplates{
@@ -36,8 +37,11 @@ func SelectArticles(articles []geektime.ArticleSummary) int {
 	index, _, err := prompt.Run()
 
 	if err != nil {
-		fmt.Printf("Prompt failed %v\n", err)
+		if !errors.Is(err, promptui.ErrInterrupt) {
+			fmt.Printf("Prompt failed %v\n", err)
+		}
 		os.Exit(1)
 	}
+
 	return index
 }
