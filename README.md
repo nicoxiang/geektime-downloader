@@ -15,7 +15,7 @@ Chrome installed
 
 ```bash
 # Go 1.16+
-go install github.com/nicoxiang/geektime-downloader
+go install github.com/nicoxiang/geektime-downloader@latest
 
 # Go version < 1.16
 go get -u github.com/nicoxiang/geektime-downloader
