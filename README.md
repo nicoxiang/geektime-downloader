@@ -9,7 +9,7 @@ geektime-downloader 目前支持下载专栏为PDF文档。
 
 ### Prerequisites
 
-Chrome installed
+- Chrome installed
 
 ### Install form source
 
@@ -54,7 +54,11 @@ Flags:
 
 1. PDF 文件下载目标位置可以通过 help 查看
 
-2. 为了避免多次登录账户，在目录 [UserConfigDir](https://pkg.go.dev/os#UserConfigDir)/geektime-downloader 下会存放用户的登录信息，如果不是在自己的电脑上执行，请在使用完毕程序后手动删除。
+2. Ctrl + c 退出程序
+
+3. 如果选择下载所有后中断程序，可重新进入程序继续下载
+
+4. 为了避免多次登录账户，在目录 [UserConfigDir](https://pkg.go.dev/os#UserConfigDir)/geektime-downloader 下会存放用户的登录信息，如果不是在自己的电脑上执行，请在使用完毕程序后手动删除。
 
 ## Inspired by 
 
