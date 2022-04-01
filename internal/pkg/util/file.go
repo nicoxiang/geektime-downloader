@@ -50,16 +50,6 @@ func FileName(name string, ext string) string {
 	return limitedName
 }
 
-func limitLength(s string, length int) string {
-	ellipses := "..."
-
-	if str := []rune(s); len(str) > length {
-		s = string(str[:length-len(ellipses)]) + ellipses
-	}
-
-	return s
-}
-
 // ReadCookieFromConfigFile read cookies from app config file, if cookie has expired, delete old config file.
 func ReadCookieFromConfigFile(phone string) ([]*http.Cookie, error) {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
@@ -167,6 +157,45 @@ func RemoveConfig(phone string) error {
 		}
 	}
 	return nil
+}
+
+// MkDownloadColumnFolder creates download column directory if not exist
+func MkDownloadColumnFolder(downloadFolder, phone, columnName string) (string, error) {
+	path := filepath.Join(downloadFolder, phone, columnName)
+	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
+		err := os.MkdirAll(path, os.ModePerm)
+		if err != nil {
+			return "", err
+		}
+	}
+	return path, nil
+}
+
+// FindDownloadedArticleFileNames find all downloaded articles file name in specified account and column
+func FindDownloadedArticleFileNames(downloadFolder, phone, columnName string) (map[string]struct{}, error) {
+	dir := filepath.Join(downloadFolder, phone, columnName)
+	files, err := ioutil.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	if len(files) == 0 {
+		return nil, nil
+	}
+	res := make(map[string]struct{})
+	for _, f := range files {
+		res[f.Name()] = struct{}{}
+	}
+	return res, nil
+}
+
+func limitLength(s string, length int) string {
+	ellipses := "..."
+
+	if str := []rune(s); len(str) > length {
+		s = string(str[:length-len(ellipses)]) + ellipses
+	}
+
+	return s
 }
 
 func checkExpire(value string) bool {

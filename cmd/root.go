@@ -1,10 +1,11 @@
 package cmd
 
 import (
-	"errors"
+	"context"
 	"fmt"
 	"math"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"runtime"
 	"strconv"
@@ -20,6 +21,8 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/util"
 	"github.com/spf13/cobra"
 )
+
+const Pdf = "pdf"
 
 var (
 	phone              string
@@ -75,11 +78,11 @@ var rootCmd = &cobra.Command{
 			columns = c
 		})
 
-		selectColumn(client)
+		selectColumn(cmd.Context(), client)
 	},
 }
 
-func selectColumn(client *resty.Client) {
+func selectColumn(ctx context.Context, client *resty.Client) {
 	if len(columns) == 0 {
 		if err := util.RemoveConfig(phone); err != nil {
 			printErrAndExit(err)
@@ -89,76 +92,75 @@ func selectColumn(client *resty.Client) {
 		}
 	}
 	currentColumnIndex = prompt.SelectColumn(columns)
-	handleSelectColumn(client)
+	handleSelectColumn(ctx, client)
 }
 
-func handleSelectColumn(client *resty.Client) {
+func handleSelectColumn(ctx context.Context, client *resty.Client) {
 	option := prompt.SelectDownLoadAllOrSelectArticles(columns[currentColumnIndex].Title)
-	handleSelectDownloadAll(option, client)
+	handleSelectDownloadAll(ctx, option, client)
 }
 
-func handleSelectDownloadAll(option int, client *resty.Client) {
+func handleSelectDownloadAll(ctx context.Context, option int, client *resty.Client) {
 	switch option {
 	case 0:
-		selectColumn(client)
+		selectColumn(ctx, client)
 	case 1:
-		handleDownloadAll(client)
+		handleDownloadAll(ctx, client)
 	case 2:
-		selectArticle(client)
+		selectArticle(ctx, client)
 	}
 }
 
-func selectArticle(client *resty.Client) {
+func selectArticle(ctx context.Context, client *resty.Client) {
 	articles := loadArticles(client)
 	index := prompt.SelectArticles(articles)
-	handleSelectArticle(articles, index, client)
+	handleSelectArticle(ctx, articles, index, client)
 }
 
-func handleSelectArticle(articles []geektime.ArticleSummary, index int, client *resty.Client) {
+func handleSelectArticle(ctx context.Context, articles []geektime.ArticleSummary, index int, client *resty.Client) {
 	if index == 0 {
-		handleSelectColumn(client)
+		handleSelectColumn(ctx, client)
 	}
 	a := articles[index-1]
-	folder, err := mkColumnDownloadFolder(phone, columns[currentColumnIndex].Title)
+	folder, err := util.MkDownloadColumnFolder(downloadFolder, phone, columns[currentColumnIndex].Title)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 	loader.Run(l, fmt.Sprintf("[ 正在下载文章 《%s》... ]", a.Title), func() {
-		err := chromedp.PrintArticlePageToPDF(a.AID, filepath.Join(folder, util.FileName(a.Title, "pdf")), client.Cookies)
-		if err != nil {
-			printErrAndExit(err)
-		}
+		chromedp.PrintArticlePageToPDF(ctx, a.AID, filepath.Join(folder, util.FileName(a.Title, Pdf)), client.Cookies)
 	})
-	selectArticle(client)
+	selectArticle(ctx, client)
 }
 
-func handleDownloadAll(client *resty.Client) {
+func handleDownloadAll(ctx context.Context, client *resty.Client) {
 	cTitle := columns[currentColumnIndex].Title
 	articles := loadArticles(client)
 	wp := workerpool.New(concurrency)
 	var counter uint64
-	folder, err := mkColumnDownloadFolder(phone, cTitle)
+	folder, err := util.MkDownloadColumnFolder(downloadFolder, phone, cTitle)
+	if err != nil {
+		printErrAndExit(err)
+	}
+	downloaded, err := util.FindDownloadedArticleFileNames(downloadFolder, phone, cTitle)
 	if err != nil {
 		printErrAndExit(err)
 	}
 	for _, a := range articles {
 		aid := a.AID
-		title := a.Title
+		fileName := util.FileName(a.Title, Pdf)
 		wp.Submit(func() {
 			prefix := fmt.Sprintf("[ 正在下载专栏 《%s》 中的所有文章, 已完成下载%d/%d ... ]", cTitle, counter, len(articles))
 			loader.Run(l, prefix, func() {
-				err := chromedp.PrintArticlePageToPDF(aid, filepath.Join(folder, util.FileName(title, "pdf")), client.Cookies)
-				if err != nil {
-					printErrAndExit(err)
-				} else {
-					atomic.AddUint64(&counter, 1)
+				if _, ok := downloaded[fileName]; !ok {
+					chromedp.PrintArticlePageToPDF(ctx, aid, filepath.Join(folder, fileName), client.Cookies)
 				}
+				atomic.AddUint64(&counter, 1)
 			})
 		})
 	}
 	wp.StopWait()
-	selectColumn(client)
+	selectColumn(ctx, client)
 }
 
 func loadArticles(client *resty.Client) []geektime.ArticleSummary {
@@ -175,20 +177,26 @@ func loadArticles(client *resty.Client) []geektime.ArticleSummary {
 	return columns[currentColumnIndex].Articles
 }
 
-func mkColumnDownloadFolder(phone, columnName string) (string, error) {
-	path := filepath.Join(downloadFolder, phone, columnName)
-	if _, err := os.Stat(path); errors.Is(err, os.ErrNotExist) {
-		err := os.MkdirAll(path, os.ModePerm)
-		if err != nil {
-			return "", err
-		}
-	}
-	return path, nil
-}
-
-// Execute func
+// Execute ...
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	ctx := context.Background()
+
+	ctx, cancel := context.WithCancel(ctx)
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	defer func() {
+		signal.Stop(c)
+		cancel()
+	}()
+	go func() {
+		select {
+		case <-c:
+			cancel()
+		case <-ctx.Done():
+		}
+	}()
+
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
 		printErrAndExit(err)
 	}
 }

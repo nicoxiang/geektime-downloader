@@ -2,8 +2,9 @@ package chromedp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -19,68 +20,40 @@ import (
 )
 
 // PrintArticlePageToPDF use chromedp to print article page and save
-func PrintArticlePageToPDF(aid int, filename string, cookies []*http.Cookie) error {
-	var buf []byte
-	ctx, cancel := chromedp.NewContext(
-		context.Background(),
-		chromedp.WithLogf(log.Printf),
-	)
-	defer cancel()
-	ctx, cancel = context.WithTimeout(ctx, 60*time.Second)
+func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookies []*http.Cookie) {
+	ctx, cancel := chromedp.NewContext(ctx)
 	defer cancel()
 
+	var buf []byte
 	err := chromedp.Run(ctx,
 		chromedp.Tasks{
 			chromedp.Emulate(device.IPadPro11),
-			setCookies(cookiesToMap(cookies)),
+			setCookies(cookies),
 			navigateAndWaitFor(pgt.GeekBang+`/column/article/`+strconv.Itoa(aid), "networkIdle"),
-			// chromedp.Navigate(pgt.GeekBang + `/column/article/` + strconv.Itoa(aid)),
-			// chromedp.ActionFunc(func(ctx context.Context) error {
-			// 	time.Sleep(time.Second * 5)
-			// 	return nil
-			// }),
-			chromedp.ActionFunc(func(ctx context.Context) error {
-				s := `
-					var divs = document.getElementsByClassName('openApp');
-					for (var i = 0; i < divs.length; ++i){
-						if(divs[i].innerText === "打开APP"){
-							divs[i].parentNode.parentNode.style.display="none";
-							break;
-						}
-					}
-				`
-				_, exp, err := runtime.Evaluate(s).Do(ctx)
-				if err != nil {
-					return err
-				}
-
-				if exp != nil {
-					return exp
-				}
-
-				return nil
-			}),
-			chromedp.ActionFunc(func(ctx context.Context) error {
-				var err error
-				buf, _, err = page.PrintToPDF().WithPrintBackground(true).Do(ctx)
-				return err
-			}),
+			hideRedundantElements(),
+			printToPDF(&buf),
 		},
 	)
 
 	if err != nil {
-		return err
+		if !errors.Is(err, context.Canceled) {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		os.Exit(1)
 	}
 
-	return ioutil.WriteFile(filename, buf, os.ModePerm)
+	if err := ioutil.WriteFile(filename, buf, os.ModePerm); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
-func setCookies(cookies map[string]string) chromedp.ActionFunc {
+func setCookies(cookies []*http.Cookie) chromedp.ActionFunc {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
 		expr := cdp.TimeSinceEpoch(time.Now().Add(180 * 24 * time.Hour))
 
-		for key, value := range cookies {
-			err := network.SetCookie(key, value).WithExpires(&expr).WithDomain(pgt.GeekBangCookieDomain).WithHTTPOnly(true).Do(ctx)
+		for _, c := range cookies {
+			err := network.SetCookie(c.Name, c.Value).WithExpires(&expr).WithDomain(pgt.GeekBangCookieDomain).WithHTTPOnly(true).Do(ctx)
 			if err != nil {
 				return err
 			}
@@ -89,13 +62,45 @@ func setCookies(cookies map[string]string) chromedp.ActionFunc {
 	})
 }
 
-func cookiesToMap(cookies []*http.Cookie) map[string]string {
-	cookieMap := make(map[string]string, len(cookies))
-	for _, c := range cookies {
-		cookieMap[c.Name] = c.Value
-	}
-	return cookieMap
+func hideRedundantElements() chromedp.ActionFunc {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		s := `
+				var openAppdiv = document.getElementsByClassName('openApp')[0];
+				if(openAppdiv){
+					openAppdiv.parentNode.parentNode.style.display="none";
+				}
+				var audioBarDiv = document.getElementsByClassName('audio-float-bar')[0];
+				if(audioBarDiv){
+					audioBarDiv.style.display="none";
+				}
+				var leadsMobileDiv = document.getElementsByClassName('leads mobile')[0];
+				if(leadsMobileDiv){
+					leadsMobileDiv.style.display="none";
+				}
+			`
+		_, exp, err := runtime.Evaluate(s).Do(ctx)
+		if err != nil {
+			return err
+		}
+
+		if exp != nil {
+			return exp
+		}
+
+		return nil
+	})
 }
+
+func printToPDF(res *[]byte) chromedp.ActionFunc {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		data, _, err := page.PrintToPDF().WithPrintBackground(false).Do(ctx)
+				if err != nil {
+					return err
+				}
+				*res = data
+				return nil
+	})
+} 
 
 func navigateAndWaitFor(url string, eventName string) chromedp.ActionFunc {
 	return func(ctx context.Context) error {
