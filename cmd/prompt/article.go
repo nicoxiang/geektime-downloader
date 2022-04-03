@@ -2,7 +2,6 @@ package prompt
 
 import (
 	"errors"
-	"fmt"
 	"os"
 
 	"github.com/manifoldco/promptui"
@@ -22,7 +21,7 @@ func SelectArticles(articles []geektime.ArticleSummary) int {
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
 		Active:   "\U00002714 {{ .Title | red }}",
-		Inactive: "{{if eq .AID -1}} {{ .Title | green }} {{else}} {{ .Title | cyan }} {{end}}",
+		Inactive: "{{if eq .AID -1}} {{ .Title | green }} {{else}} {{ .Title }} {{end}}",
 	}
 
 	prompt := promptui.Select{
@@ -38,7 +37,7 @@ func SelectArticles(articles []geektime.ArticleSummary) int {
 
 	if err != nil {
 		if !errors.Is(err, promptui.ErrInterrupt) {
-			fmt.Printf("Prompt failed %v\n", err)
+			panic(err)
 		}
 		os.Exit(1)
 	}

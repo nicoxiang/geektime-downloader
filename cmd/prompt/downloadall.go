@@ -9,20 +9,25 @@ import (
 )
 
 // SelectDownLoadAllOrSelectArticles show select promt to choose what to do on selected column
-func SelectDownLoadAllOrSelectArticles(title string) int {
-	var options = []struct {
-		Text string
+func SelectDownLoadAllOrSelectArticles(title, productType string) int {
+	type option struct {
+		Text  string
 		Value int
-	}{
-		{"返回上一级", 0},
-		{"下载当前专栏所有文章", 1},
-		{"选择文章", 2},
+	}
+	options := make([]option, 3)
+	options[0] = option{"返回上一级", 0}
+	if productType == "c1" {
+		options[1] = option{"下载当前专栏所有文章", 1}
+		options[2] = option{"选择文章", 2}
+	} else if productType == "c3" {
+		options[1] = option{"下载当前视频课所有视频", 1}
+		options[2] = option{"选择视频", 2}
 	}
 
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
 		Active:   "\U00002714 {{ .Text | red }}",
-		Inactive: "{{if eq .Value 0}} {{ .Text | green }} {{else}} {{ .Text | cyan }} {{end}}",
+		Inactive: "{{if eq .Value 0}} {{ .Text | green }} {{else}} {{ .Text }} {{end}}",
 	}
 
 	prompt := promptui.Select{
@@ -37,7 +42,7 @@ func SelectDownLoadAllOrSelectArticles(title string) int {
 
 	if err != nil {
 		if !errors.Is(err, promptui.ErrInterrupt) {
-			fmt.Printf("Prompt failed %v\n", err)
+			panic(err)
 		}
 		os.Exit(1)
 	}

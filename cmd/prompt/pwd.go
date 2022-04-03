@@ -2,7 +2,6 @@ package prompt
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strings"
 
@@ -28,7 +27,7 @@ func GetPwd() string {
 
 	if err != nil {
 		if !errors.Is(err, promptui.ErrInterrupt) {
-			fmt.Printf("Prompt failed %v\n", err)
+			panic(err)
 		}
 		os.Exit(1)
 	}
