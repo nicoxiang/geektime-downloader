@@ -1,14 +1,18 @@
 package geektime
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/nicoxiang/geektime-downloader/internal/client"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
+var ErrWrongPassword = errors.New("密码错误, 请尝试重新登录")
+var ErrTooManyLoginAttemptTimes = errors.New("密码输入错误次数过多，已触发验证码校验，请稍后再试")
+
 // Login call geektime login api and return auth cookies
-func Login(phone, password string) []*http.Cookie {
+func Login(phone, password string) ([]*http.Cookie, error) {
 	var result struct {
 		Code int `json:"code"`
 		Data struct {
@@ -45,7 +49,11 @@ func Login(phone, password string) []*http.Cookie {
 				cookies = append(cookies, c)
 			}
 		}
-		return cookies
+		return cookies, nil
+	} else if result.Error.Code == -3031 {
+		return nil, ErrWrongPassword
+	} else if result.Error.Code == -3005 {
+		return nil, ErrTooManyLoginAttemptTimes
 	}
 	panic(result.Error.Msg)
 }

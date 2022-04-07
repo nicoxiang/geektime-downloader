@@ -80,7 +80,11 @@ var rootCmd = &cobra.Command{
 			checkPromptError(err)
 			sp.Prefix = "[ 正在登录... ]"
 			sp.Start()
-			readCookies = geektime.Login(phone, pwd)
+			readCookies, err = geektime.Login(phone, pwd)
+			if err != nil {
+				sp.Stop()
+				checkGeekTimeError(err)
+			}
 			file.WriteCookieToConfigFile(phone, readCookies)
 			sp.Stop()
 			fmt.Println("登录成功")
@@ -261,10 +265,13 @@ func loadProducts(client *resty.Client) {
 	sp.Prefix = "[ 正在加载已购买课程列表... ]"
 	sp.Start()
 	p, err := geektime.GetProductList(client)
-	checkGeekTimeError(err)
+	if err != nil {
+		sp.Stop()
+		checkGeekTimeError(err)
+	}
 	if len(p) <= 0 {
 		sp.Stop()
-		fmt.Printf("当前账户没有已购买课程")
+		fmt.Print("当前账户没有已购买课程")
 		os.Exit(1)
 	}
 	products = p
@@ -322,7 +329,10 @@ func checkGeekTimeError(err error) {
 	if err != nil {
 		if errors.Is(err, geektime.ErrAuthFailed) {
 			file.RemoveConfig(phone)
-			fmt.Fprint(os.Stdout, err.Error())
+			fmt.Print(err.Error())
+		} else if errors.Is(err, geektime.ErrWrongPassword) ||
+			errors.Is(err, geektime.ErrTooManyLoginAttemptTimes) {
+			fmt.Print(err.Error())
 		} else {
 			fmt.Fprintf(os.Stderr, "An error occurred: %v\n", err)
 		}
