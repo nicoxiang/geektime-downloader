@@ -2,22 +2,13 @@ package geektime
 
 import (
 	"net/http"
-	"time"
 
-	"github.com/go-resty/resty/v2"
+	"github.com/nicoxiang/geektime-downloader/internal/client"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
 // Login call geektime login api and return auth cookies
-func Login(phone, password string) (string, []*http.Cookie) {
-	client := resty.New().
-		SetTimeout(5*time.Second).
-		SetHeader("User-Agent", UserAgent).
-		SetHeader("Content-Type", "application/json").
-		SetHeader("Accept", "application/json").
-		SetHeader("Connection", "keep-alive").
-		SetBaseURL(pgt.GeekBangAccount)
-
+func Login(phone, password string) []*http.Cookie {
 	var result struct {
 		Code int `json:"code"`
 		Data struct {
@@ -30,7 +21,7 @@ func Login(phone, password string) (string, []*http.Cookie) {
 		} `json:"error"`
 	}
 
-	loginResponse, err := client.R().
+	loginResponse, err := client.NewTimeGeekAccountRestyClient().R().
 		SetHeader("Referer", pgt.GeekBangAccount+"/signin?redirect=https%3A%2F%2Ftime.geekbang.org%2F").
 		SetBody(
 			map[string]interface{}{
@@ -44,17 +35,17 @@ func Login(phone, password string) (string, []*http.Cookie) {
 		Post("/account/ticket/login")
 
 	if err != nil {
-		return err.Error(), nil
+		panic(err)
 	}
 
 	if result.Code == 0 {
 		var cookies []*http.Cookie
 		for _, c := range loginResponse.Cookies() {
-			if c.Name == "GCID" || c.Name == "GCESS" || c.Name == "SERVERID" {
+			if c.Name == "GCID" || c.Name == "GCESS" {
 				cookies = append(cookies, c)
 			}
 		}
-		return "", cookies
+		return cookies
 	}
-	return result.Error.Msg, nil
+	panic(result.Error.Msg)
 }

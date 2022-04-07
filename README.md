@@ -1,6 +1,6 @@
 # geektime-downloader
 
-geektime-downloader 目前支持下载专栏为PDF文档。
+geektime-downloader 支持下载专栏为 PDF 文档和下载视频课。
 
 [![go report card](https://goreportcard.com/badge/github.com/nicoxiang/geektime-downloader "go report card")](https://goreportcard.com/report/github.com/nicoxiang/geektime-downloader)
 [![MIT license](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
@@ -44,15 +44,16 @@ Usage:
   geektime-downloader [flags]
 
 Flags:
-  -c, --concurrency int   下载文章的并发数 (default 4)
-  -f, --folder string     PDF 文件下载目标位置 (default "")
+  -c, --concurrency int   下载并发数 (default 4)
+  -f, --folder string     专栏和视频课的下载目标位置 (default "")
   -h, --help              help for geektime-downloader
   -u, --phone string      你的极客时间账号(手机号)(required)
+  -q, --quality string    下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
 ```
 
 ## Note
 
-1. PDF 文件下载目标位置可以通过 help 查看
+1. 文件下载目标位置可以通过 help 查看
 
 2. Ctrl + c 退出程序
 

@@ -1,21 +1,23 @@
 package geektime
 
 import (
-	"errors"
-
 	"github.com/go-resty/resty/v2"
 )
 
-// ColumnSummary Mini column struct
-type ColumnSummary struct {
-	CID        int
+// Product ...
+type Product struct {
+	ID         int
 	Title      string
 	AuthorName string
+	Type       string
 	Articles   []ArticleSummary
 }
 
-// GetColumnList call geektime api to get column list
-func GetColumnList(client *resty.Client) ([]ColumnSummary, error) {
+// GetProductList call geektime api to get column list
+func GetProductList(client *resty.Client) ([]Product, error) {
+	if !Auth(client.Cookies) {
+		return nil, ErrAuthFailed
+	}
 	var result struct {
 		Code int `json:"code"`
 		Data struct {
@@ -25,6 +27,7 @@ func GetColumnList(client *resty.Client) ([]ColumnSummary, error) {
 				Author struct {
 					Name string `json:"name"`
 				} `json:"author"`
+				Type string `json:"type"`
 			} `json:"products"`
 		} `json:"data"`
 		Error struct {
@@ -44,26 +47,30 @@ func GetColumnList(client *resty.Client) ([]ColumnSummary, error) {
 				"prev":             0,
 				"size":             200,
 				"sort":             1,
-				"type":             "c1",
+				"type":             "",
 				"with_learn_count": 1,
 			}).
 		SetResult(&result).
 		Post("/serv/v3/learn/product")
 
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	if result.Code == 0 {
-		var products []ColumnSummary
+		var products []Product
 		for _, v := range result.Data.Products {
-			products = append(products, ColumnSummary{
-				CID:        v.ID,
-				Title:      v.Title,
-				AuthorName: v.Author.Name,
-			})
+			// For now we can only download column and video
+			if v.Type == "c1" || v.Type == "c3" {
+				products = append(products, Product{
+					ID:         v.ID,
+					Title:      v.Title,
+					AuthorName: v.Author.Name,
+					Type:       v.Type,
+				})
+			}
 		}
 		return products, nil
 	}
-	return nil, errors.New("call geektime product api failed")
+	panic("make geektime product api call failed")
 }

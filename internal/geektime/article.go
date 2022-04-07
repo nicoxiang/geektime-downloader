@@ -1,19 +1,27 @@
 package geektime
 
 import (
-	"errors"
-
 	"github.com/go-resty/resty/v2"
 )
 
-// ArticleSummary Mini article struct
+// ArticleSummary ...
 type ArticleSummary struct {
 	AID   int
 	Title string
 }
 
+// VideoInfo ...
+type VideoInfo struct {
+	M3U8URL string
+	Size    int
+}
+
 // GetArticles call geektime api to get article list
 func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
+	if !Auth(client.Cookies) {
+		return nil, ErrAuthFailed
+	}
+
 	var result struct {
 		Code int `json:"code"`
 		Data struct {
@@ -36,7 +44,7 @@ func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
 		Post("/serv/v1/column/articles")
 
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
 	if result.Code == 0 {
@@ -49,5 +57,53 @@ func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
 		}
 		return articles, nil
 	}
-	return nil, errors.New("call geektime articles api failed")
+	panic("make geektime articles api call failed")
+}
+
+// GetVideoInfo call geektime api to get video info
+func GetVideoInfo(aid int, quality string, client *resty.Client) (VideoInfo, error) {
+	var videoInfo VideoInfo
+	if !Auth(client.Cookies) {
+		return videoInfo, ErrAuthFailed
+	}
+
+	var result struct {
+		Code int `json:"code"`
+		Data struct {
+			Info struct {
+				ID    int    `json:"id"`
+				Title string `json:"title"`
+				Video struct {
+					HLSVideos []struct {
+						Size    int    `json:"size"`
+						Quality string `json:"quality"`
+						URL     string `json:"url"`
+					} `json:"hls_medias"`
+				} `json:"video"`
+			} `json:"info"`
+		} `json:"data"`
+	}
+	_, err := client.R().
+		SetBody(
+			map[string]interface{}{
+				"id": aid,
+			}).
+		SetResult(&result).
+		Post("/serv/v3/article/info")
+
+	if err != nil {
+		panic(err)
+	}
+
+	if result.Code == 0 {
+		for _, v := range result.Data.Info.Video.HLSVideos {
+			if v.Quality == quality {
+				return VideoInfo{
+					v.URL,
+					v.Size,
+				}, nil
+			}
+		}
+	}
+	panic("make geektime article info api call failed")
 }

@@ -3,7 +3,6 @@ package chromedp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -37,14 +36,13 @@ func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookie
 
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
-			fmt.Fprintln(os.Stderr, err)
+			panic(err)
 		}
 		os.Exit(1)
 	}
 
 	if err := ioutil.WriteFile(filename, buf, os.ModePerm); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		panic(err)
 	}
 }
 
@@ -94,13 +92,13 @@ func hideRedundantElements() chromedp.ActionFunc {
 func printToPDF(res *[]byte) chromedp.ActionFunc {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
 		data, _, err := page.PrintToPDF().WithPrintBackground(false).Do(ctx)
-				if err != nil {
-					return err
-				}
-				*res = data
-				return nil
+		if err != nil {
+			return err
+		}
+		*res = data
+		return nil
 	})
-} 
+}
 
 func navigateAndWaitFor(url string, eventName string) chromedp.ActionFunc {
 	return func(ctx context.Context) error {
