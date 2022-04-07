@@ -84,7 +84,10 @@ func writeToTempVideoFile(ctx context.Context, sem chan bool, count chan struct{
 		}
 		tsURL := tsURLPrefix + tsFileName
 		resp, err := client.NewNoParseResponseRestyClient().R().SetContext(ctx).Get(tsURL)
-		if err != nil && !errors.Is(err, context.Canceled) {
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return
+			}
 			panic(err)
 		}
 		if resp.RawResponse != nil && resp.RawResponse.StatusCode == 200 && resp.RawResponse.ContentLength > 0 {
