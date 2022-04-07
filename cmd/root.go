@@ -10,19 +10,20 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/briandowns/spinner"
 	"github.com/go-resty/resty/v2"
-	"github.com/nicoxiang/geektime-downloader/cmd/prompt"
+	"github.com/manifoldco/promptui"
 	"github.com/nicoxiang/geektime-downloader/internal/client"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
-	"github.com/nicoxiang/geektime-downloader/internal/loader"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/chromedp"
+
+	"github.com/nicoxiang/geektime-downloader/internal/chromedp"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/file"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/video"
+	"github.com/nicoxiang/geektime-downloader/internal/video"
 	"github.com/spf13/cobra"
 )
 
@@ -36,22 +37,24 @@ var (
 	phone               string
 	concurrency         int
 	downloadFolder      string
-	l                   *spinner.Spinner
+	sp                  *spinner.Spinner
 	products            []geektime.Product
 	currentProductIndex int
-	quality				string
+	quality             string
 )
 
 func init() {
 	userHomeDir, _ := os.UserHomeDir()
 	defaultConcurency := int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
 	defaultDownloadFolder := filepath.Join(userHomeDir, file.GeektimeDownloaderFolder)
+
 	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)(required)")
 	_ = rootCmd.MarkFlagRequired("phone")
 	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "专栏和视频课的下载目标位置")
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "c", defaultConcurency, "下载并发数")
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
-	l = loader.NewSpinner()
+
+	sp = spinner.New(spinner.CharSets[70], 100*time.Millisecond)
 }
 
 var rootCmd = &cobra.Command{
@@ -59,46 +62,87 @@ var rootCmd = &cobra.Command{
 	Short: "Geektime-downloader is used to download geek time lessons",
 	Run: func(cmd *cobra.Command, args []string) {
 		if quality != "ld" && quality != "sd" && quality != "hd" {
-			fmt.Fprintln(os.Stderr, "argument 'quality' is not valid")
-			os.Exit(1)
+			exit("argument 'quality' is not valid")
 		}
 		readCookies := file.ReadCookieFromConfigFile(phone)
 		if readCookies == nil {
-			pwd := prompt.GetPwd()
-			loader.Run(l, "[ 正在登录... ]", func() {
-				readCookies = geektime.Login(phone, pwd)
-				file.WriteCookieToConfigFile(phone, readCookies)
-			})
+			prompt := promptui.Prompt{
+				Label: "请输入密码",
+				Validate: func(s string) error {
+					if strings.TrimSpace(s) == "" {
+						return errors.New("密码不能为空")
+					}
+					return nil
+				},
+				Mask: '*',
+			}
+			pwd, err := prompt.Run()
+			checkPromptError(err)
+			sp.Prefix = "[ 正在登录... ]"
+			sp.Start()
+			readCookies = geektime.Login(phone, pwd)
+			file.WriteCookieToConfigFile(phone, readCookies)
+			sp.Stop()
 			fmt.Println("登录成功")
 		}
 		client := client.NewTimeGeekRestyClient(readCookies)
-
-		loader.Run(l, "[ 正在加载已购买课程列表... ]", func() {
-			p, err := geektime.GetProductList(client)
-			if err != nil {
-				printErrAndExit(err)
-			}
-			products = p
-		})
-
 		selectProduct(cmd.Context(), client)
 	},
 }
 
 func selectProduct(ctx context.Context, client *resty.Client) {
-	currentProductIndex = prompt.SelectProduct(products)
-	handleSelectColumn(ctx, client)
+	loadProducts(client)
+	templates := &promptui.SelectTemplates{
+		Label:    "{{ . }}",
+		Active:   "\U00002714 {{if eq .Type `c1`}} {{ `专栏` | red }} {{else}} {{ `视频课` | red }} {{end}} {{ .Title | red }} {{ .AuthorName | red }}",
+		Inactive: "{{if eq .Type `c1`}} {{ `专栏` }} {{else}} {{ `视频课` }} {{end}} {{ .Title }} {{ .AuthorName }}",
+	}
+	prompt := promptui.Select{
+		Label:        "请选择课程: ",
+		Items:        products,
+		Templates:    templates,
+		Size:         len(products),
+		HideSelected: true,
+	}
+	index, _, err := prompt.Run()
+	checkPromptError(err)
+	currentProductIndex = index
+	handleSelectProduct(ctx, client)
 }
 
-func handleSelectColumn(ctx context.Context, client *resty.Client) {
-	option := prompt.SelectDownLoadAllOrSelectArticles(
-		products[currentProductIndex].Title,
-		products[currentProductIndex].Type,
-	)
-	handleSelectDownloadAll(ctx, option, client)
+func handleSelectProduct(ctx context.Context, client *resty.Client) {
+	currentProduct := products[currentProductIndex]
+	type option struct {
+		Text  string
+		Value int
+	}
+	options := make([]option, 3)
+	options[0] = option{"返回上一级", 0}
+	if isColumn() {
+		options[1] = option{"下载当前专栏所有文章", 1}
+		options[2] = option{"选择文章", 2}
+	} else if isVideo() {
+		options[1] = option{"下载当前视频课所有视频", 1}
+		options[2] = option{"选择视频", 2}
+	}
+	templates := &promptui.SelectTemplates{
+		Label:    "{{ . }}",
+		Active:   "\U00002714 {{ .Text | red }}",
+		Inactive: "{{if eq .Value 0}} {{ .Text | green }} {{else}} {{ .Text }} {{end}}",
+	}
+	prompt := promptui.Select{
+		Label:        fmt.Sprintf("当前选中的专栏为: %s, 请继续选择：", currentProduct.Title),
+		Items:        options,
+		Templates:    templates,
+		Size:         len(options),
+		HideSelected: true,
+	}
+	index, _, err := prompt.Run()
+	checkPromptError(err)
+	handleSelectProductOps(ctx, index, client)
 }
 
-func handleSelectDownloadAll(ctx context.Context, option int, client *resty.Client) {
+func handleSelectProductOps(ctx context.Context, option int, client *resty.Client) {
 	switch option {
 	case 0:
 		selectProduct(ctx, client)
@@ -111,13 +155,34 @@ func handleSelectDownloadAll(ctx context.Context, option int, client *resty.Clie
 
 func selectArticle(ctx context.Context, client *resty.Client) {
 	articles := loadArticles(client)
-	index := prompt.SelectArticles(articles)
+	items := []geektime.ArticleSummary{
+		{
+			AID:   -1,
+			Title: "返回上一级",
+		},
+	}
+	items = append(items, articles...)
+	templates := &promptui.SelectTemplates{
+		Label:    "{{ . }}",
+		Active:   "\U00002714 {{ .Title | red }}",
+		Inactive: "{{if eq .AID -1}} {{ .Title | green }} {{else}} {{ .Title }} {{end}}",
+	}
+	prompt := promptui.Select{
+		Label:        "请选择文章: ",
+		Items:        items,
+		Templates:    templates,
+		Size:         len(items),
+		HideSelected: true,
+		CursorPos:    0,
+	}
+	index, _, err := prompt.Run()
+	checkPromptError(err)
 	handleSelectArticle(ctx, articles, index, client)
 }
 
 func handleSelectArticle(ctx context.Context, articles []geektime.ArticleSummary, index int, client *resty.Client) {
 	if index == 0 {
-		handleSelectColumn(ctx, client)
+		handleSelectProduct(ctx, client)
 	}
 	a := articles[index-1]
 	projectDir := file.MkDownloadProjectFolder(downloadFolder, phone, products[currentProductIndex].Title)
@@ -164,9 +229,7 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 				continue
 			}
 			videoInfo, err := geektime.GetVideoInfo(a.AID, "ld", client)
-			if err != nil {
-				printErrAndExit(err)
-			}
+			checkGeekTimeError(err)
 			video.DownloadVideo(ctx, videoInfo.M3U8URL, a.Title, folder, int64(videoInfo.Size), concurrency)
 		}
 	}
@@ -191,16 +254,32 @@ func printPDFworker(limit int, t printPDFTask) chan<- geektime.ArticleSummary {
 	return ch
 }
 
+func loadProducts(client *resty.Client) {
+	if len(products) > 0 {
+		return
+	}
+	sp.Prefix = "[ 正在加载已购买课程列表... ]"
+	sp.Start()
+	p, err := geektime.GetProductList(client)
+	checkGeekTimeError(err)
+	if len(p) <= 0 {
+		sp.Stop()
+		fmt.Printf("当前账户没有已购买课程")
+		os.Exit(1)
+	}
+	products = p
+	sp.Stop()
+}
+
 func loadArticles(client *resty.Client) []geektime.ArticleSummary {
 	p := products[currentProductIndex]
 	if len(p.Articles) <= 0 {
-		loader.Run(l, "[ 正在加载文章列表...]", func() {
-			articles, err := geektime.GetArticles(strconv.Itoa(p.ID), client)
-			if err != nil {
-				printErrAndExit(err)
-			}
-			products[currentProductIndex].Articles = articles
-		})
+		sp.Prefix = "[ 正在加载文章列表... ]"
+		sp.Start()
+		articles, err := geektime.GetArticles(strconv.Itoa(p.ID), client)
+		checkGeekTimeError(err)
+		products[currentProductIndex].Articles = articles
+		sp.Stop()
 	}
 	return products[currentProductIndex].Articles
 }
@@ -215,19 +294,18 @@ func downloadArticle(ctx context.Context, article geektime.ArticleSummary, proje
 	fileName := file.Filenamify(article.Title) + ext
 	fileFullPath := filepath.Join(projectDir, fileName)
 
-	if products[currentProductIndex].Type == "c1" {
-		loader.Run(l, fmt.Sprintf("[ 正在下载 《%s》... ]", article.Title), func() {
-			chromedp.PrintArticlePageToPDF(ctx,
-				article.AID,
-				fileFullPath,
-				client.Cookies,
-			)
-		})
-	} else if products[currentProductIndex].Type == "c3" {
+	if isColumn() {
+		sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》... ]", article.Title)
+		sp.Start()
+		chromedp.PrintArticlePageToPDF(ctx,
+			article.AID,
+			fileFullPath,
+			client.Cookies,
+		)
+		sp.Stop()
+	} else if isVideo() {
 		videoInfo, err := geektime.GetVideoInfo(article.AID, "ld", client)
-		if err != nil {
-			printErrAndExit(err)
-		}
+		checkGeekTimeError(err)
 		video.DownloadVideo(ctx, videoInfo.M3U8URL, article.Title, projectDir, int64(videoInfo.Size), concurrency)
 	}
 }
@@ -238,6 +316,32 @@ func isColumn() bool {
 
 func isVideo() bool {
 	return products[currentProductIndex].Type == "c3"
+}
+
+func checkGeekTimeError(err error) {
+	if err != nil {
+		if errors.Is(err, geektime.ErrAuthFailed) {
+			file.RemoveConfig(phone)
+			fmt.Fprint(os.Stdout, err.Error())
+		} else {
+			fmt.Fprintf(os.Stderr, "An error occurred: %v\n", err)
+		}
+		os.Exit(1)
+	}
+}
+
+func checkPromptError(err error) {
+	if err != nil {
+		if !errors.Is(err, promptui.ErrInterrupt) {
+			fmt.Fprintln(os.Stderr, err)
+		}
+		os.Exit(1)
+	}
+}
+
+func exit(msg string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, msg+"\n", args...)
+	os.Exit(1)
 }
 
 // Execute ...
@@ -260,14 +364,6 @@ func Execute() {
 	}()
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
-		printErrAndExit(err)
+		exit(err.Error())
 	}
-}
-
-func printErrAndExit(err error) {
-	if errors.Is(err, geektime.ErrAuthFailed) {
-		file.RemoveConfig(phone)
-	}
-	fmt.Fprintln(os.Stderr, err)
-	os.Exit(1)
 }

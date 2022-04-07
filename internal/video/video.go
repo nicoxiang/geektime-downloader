@@ -12,11 +12,11 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/nicoxiang/geektime-downloader/internal/client"
 	cfile "github.com/nicoxiang/geektime-downloader/internal/pkg/file"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/progressbar"
 )
 
 const syncByte = uint8(71) //0x47
@@ -54,7 +54,7 @@ func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder st
 	sem := make(chan bool, concurrency)
 	count := make(chan struct{}, c)
 
-	bar := progressbar.New(size, fmt.Sprintf("[正在下载 %s] ", title))
+	bar := newBar(size, fmt.Sprintf("[正在下载 %s] ", title))
 	bar.Start()
 	for _, tsFileName := range tsFileNames {
 		go func(tsFileName string) {
@@ -87,7 +87,7 @@ func writeToTempVideoFile(ctx context.Context, sem chan bool, count chan struct{
 		if err != nil && !errors.Is(err, context.Canceled) {
 			panic(err)
 		}
-		if resp.RawResponse.StatusCode == 200 && resp.RawResponse.ContentLength > 0 {
+		if resp.RawResponse != nil && resp.RawResponse.StatusCode == 200 && resp.RawResponse.ContentLength > 0 {
 			t := filepath.Join(tempVideoDir, tsFileName)
 			f, err := os.OpenFile(t, os.O_CREATE|os.O_WRONLY, 0644)
 			if err != nil {
@@ -198,6 +198,16 @@ func pkcs5UnPadding(origData []byte) []byte {
 	length := len(origData)
 	unpadding := int(origData[length-1])
 	return origData[:(length - unpadding)]
+}
+
+func newBar(size int64, prefix string) *pb.ProgressBar {
+	bar := pb.New64(size)
+	bar.SetRefreshRate(time.Second)
+	bar.Set(pb.Bytes, true)
+	bar.Set(pb.SIBytesPrefix, true)
+	bar.SetTemplate(pb.Simple)
+	bar.Set("prefix", prefix)
+	return bar
 }
 
 // total bytes may greater than expected

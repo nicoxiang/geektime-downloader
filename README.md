@@ -48,7 +48,7 @@ Flags:
   -f, --folder string     专栏和视频课的下载目标位置 (default "")
   -h, --help              help for geektime-downloader
   -u, --phone string      你的极客时间账号(手机号)(required)
-  -q, --quality string    下载视频清晰度(ld标清,sd高清,hd超清) (default "ld")
+  -q, --quality string    下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
 ```
 
 ## Note
