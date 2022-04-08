@@ -13,29 +13,42 @@ type Product struct {
 	Articles   []ArticleSummary
 }
 
+type ProductRequest struct {
+	Code int `json:"code"`
+	Data struct {
+		List []struct {
+			Score int `json:"score"`
+		} `json:"list"`
+		Products []struct {
+			ID     int    `json:"id"`
+			Title  string `json:"title"`
+			Author struct {
+				Name string `json:"name"`
+			} `json:"author"`
+			Type string `json:"type"`
+		} `json:"products"`
+		Page struct {
+			More bool `json:"more"`
+		} `json:"page"`
+	} `json:"data"`
+	Error struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	} `json:"error"`
+}
+
 // GetProductList call geektime api to get product list
 func GetProductList(client *resty.Client) ([]Product, error) {
 	if !Auth(client.Cookies) {
 		return nil, ErrAuthFailed
 	}
-	var result struct {
-		Code int `json:"code"`
-		Data struct {
-			Products []struct {
-				ID     int    `json:"id"`
-				Title  string `json:"title"`
-				Author struct {
-					Name string `json:"name"`
-				} `json:"author"`
-				Type string `json:"type"`
-			} `json:"products"`
-		} `json:"data"`
-		Error struct {
-			Code int    `json:"code"`
-			Msg  string `json:"msg"`
-		} `json:"error"`
-	}
+	var products []Product = make([]Product, 0)
+	addProducts(client, 0, &products)
+	return products, nil
+}
 
+func addProducts(client *resty.Client, prev int, products *[]Product) {
+	var result ProductRequest
 	_, err := client.R().
 		SetBody(
 			map[string]interface{}{
@@ -43,8 +56,8 @@ func GetProductList(client *resty.Client) ([]Product, error) {
 				"expire":           1,
 				"last_learn":       0,
 				"learn_status":     0,
-				"prev":             0,
-				"size":             200,
+				"prev":             prev,
+				"size":             20,
 				"sort":             1,
 				"type":             "",
 				"with_learn_count": 1,
@@ -57,11 +70,10 @@ func GetProductList(client *resty.Client) ([]Product, error) {
 	}
 
 	if result.Code == 0 {
-		var products []Product
 		for _, v := range result.Data.Products {
 			// For now we can only download column and video
 			if v.Type == "c1" || v.Type == "c3" {
-				products = append(products, Product{
+				*products = append(*products, Product{
 					ID:         v.ID,
 					Title:      v.Title,
 					AuthorName: v.Author.Name,
@@ -69,7 +81,11 @@ func GetProductList(client *resty.Client) ([]Product, error) {
 				})
 			}
 		}
-		return products, nil
+		if result.Data.Page.More {
+			score := result.Data.List[0].Score
+			addProducts(client, score, products)
+		}
+	} else {
+		panic("make geektime product api call failed")
 	}
-	panic("make geektime product api call failed")
 }
