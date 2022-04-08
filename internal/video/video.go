@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
@@ -28,14 +29,14 @@ func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder st
 	filenamifyTitle := cfile.Filenamify(title)
 
 	// Stage1: Make m3u8 URL call and resolve
-	decryptkmsURL, tsFileNames, err := readM3U8File(ctx, m3u8url)
-	if err != nil && errors.Is(err, context.Canceled) {
+	decryptkmsURL, tsFileNames := readM3U8File(ctx, m3u8url)
+	if decryptkmsURL == "" || len(tsFileNames) == 0 {
 		return
 	}
 
 	// Stage2: Get decrypt key
-	key, err := getDecryptKey(ctx, decryptkmsURL)
-	if err != nil && errors.Is(err, context.Canceled) {
+	key := getDecryptKey(ctx, decryptkmsURL)
+	if key == nil {
 		return
 	}
 
@@ -50,43 +51,43 @@ func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder st
 		}
 	}()
 
-	c := len(tsFileNames)
-	sem := make(chan bool, concurrency)
-	count := make(chan struct{}, c)
+	// classic bounded work pooling pattern
+	var wg sync.WaitGroup
+	wg.Add(concurrency)
+	ch := make(chan string, concurrency)
 
 	bar := newBar(size, fmt.Sprintf("[正在下载 %s] ", title))
 	bar.Start()
-	for _, tsFileName := range tsFileNames {
-		go func(tsFileName string) {
-			writeToTempVideoFile(ctx, sem, count, bar, tsURLPrefix, tempVideoDir, tsFileName)
-		}(tsFileName)
+
+	for i := 0; i < concurrency; i++ {
+		go func() {
+			writeToTempVideoFile(ctx, ch, &wg, bar, tsURLPrefix, tempVideoDir)
+		}()
 	}
 
-	for c > 0 {
-		<-count
-		c--
+	for _, tsFileName := range tsFileNames {
+		ch <- tsFileName
 	}
+	close(ch)
+	wg.Wait()
 	bar.Finish()
 
 	// Stage4: Read temp ts files, decrypt and merge into the one final video file
 	mergeTSFiles(ctx, tempVideoDir, filenamifyTitle, downloadProjectFolder, key)
 }
 
-func writeToTempVideoFile(ctx context.Context, sem chan bool, count chan struct{}, bar *pb.ProgressBar, tsURLPrefix, tempVideoDir, tsFileName string) {
-	defer func() {
-		<-sem
-		count <- struct{}{}
-	}()
-	sem <- true
-	{
+func writeToTempVideoFile(ctx context.Context, ch chan string, wg *sync.WaitGroup, bar *pb.ProgressBar, tsURLPrefix, tempVideoDir string) {
+	defer wg.Done()
+
+	for tsFileName := range ch {
 		if cancelled(ctx) {
-			return
+			continue
 		}
 		tsURL := tsURLPrefix + tsFileName
 		resp, err := client.NewNoParseResponseRestyClient().R().SetContext(ctx).Get(tsURL)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
-				return
+				continue
 			}
 			panic(err)
 		}
@@ -97,6 +98,7 @@ func writeToTempVideoFile(ctx context.Context, sem chan bool, count chan struct{
 				panic(err)
 			}
 			written, err := io.Copy(f, resp.RawBody())
+			err = resp.RawBody().Close()
 			if err != nil && !errors.Is(err, context.Canceled) {
 				panic(err)
 			}
@@ -108,16 +110,16 @@ func writeToTempVideoFile(ctx context.Context, sem chan bool, count chan struct{
 	}
 }
 
-func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFileNames []string, err error) {
+func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFileNames []string) {
 	if cancelled(ctx) {
-		return "", nil, context.Canceled
+		return "", nil
 	}
 	resp, err := client.New().R().SetContext(ctx).Get(url)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			panic(err)
 		}
-		return "", nil, context.Canceled
+		return "", nil
 	}
 	data := resp.Body()
 	s := string(data)
@@ -173,18 +175,18 @@ func mergeTSFiles(ctx context.Context, tempVideoDir, filenamifyTitle, downloadPr
 	}
 }
 
-func getDecryptKey(ctx context.Context, decryptkmsURL string) ([]byte, error) {
+func getDecryptKey(ctx context.Context, decryptkmsURL string) ([]byte) {
 	if cancelled(ctx) {
-		return nil, context.Canceled
+		return nil
 	}
 	keyResp, err := client.New().R().SetContext(ctx).Get(decryptkmsURL)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			panic(err)
 		}
-		return nil, context.Canceled
+		return nil
 	}
-	return keyResp.Body(), nil
+	return keyResp.Body()
 }
 
 func aesDecryptCBC(encrypted, key, iv []byte) (decrypted []byte) {

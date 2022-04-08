@@ -13,7 +13,7 @@ type Product struct {
 	Articles   []ArticleSummary
 }
 
-// GetProductList call geektime api to get column list
+// GetProductList call geektime api to get product list
 func GetProductList(client *resty.Client) ([]Product, error) {
 	if !Auth(client.Cookies) {
 		return nil, ErrAuthFailed
@@ -36,7 +36,6 @@ func GetProductList(client *resty.Client) ([]Product, error) {
 		} `json:"error"`
 	}
 
-	client.SetHeader("Referer", "https://time.geekbang.org/dashboard/course")
 	_, err := client.R().
 		SetBody(
 			map[string]interface{}{

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -203,29 +204,31 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 	folder := file.MkDownloadProjectFolder(downloadFolder, phone, cTitle)
 	downloaded := file.FindDownloadedArticleFileNames(folder)
 	if isColumn() {
-		c := len(articles)
+		// classic bounded work pooling pattern
 		var counter uint64
 		var wg sync.WaitGroup
-		wg.Add(c)
-		fn := func(a geektime.ArticleSummary) {
-			defer wg.Done()
-			aid := a.AID
-			fileName := file.Filenamify(a.Title) + PDFExtension
-			fileFullPath := filepath.Join(folder, fileName)
-			chromedp.PrintArticlePageToPDF(ctx, aid, fileFullPath, client.Cookies)
-			atomic.AddUint64(&counter, 1)
-			fmt.Printf("\r已完成下载%d/%d", counter, c)
-		}
-		ch := printPDFworker(concurrency, fn)
+		wg.Add(concurrency)
+		ch := make(chan geektime.ArticleSummary, concurrency)
 		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", cTitle)
+
+		p := downloadSuccessPrinter{i: 0}
+		for i := 0; i < concurrency; i++ {
+			go func() {
+				printPDF(ctx, ch, &wg, folder, client.Cookies, len(articles), &p)
+			}()
+		}
+		
 		for _, a := range articles {
 			fileName := file.Filenamify(a.Title) + PDFExtension
 			if _, ok := downloaded[fileName]; ok {
 				atomic.AddUint64(&counter, 1)
+				p.print(len(articles))
 				continue
 			}
 			ch <- a
 		}
+		close(ch)
+		wg.Wait()
 	} else if isVideo() {
 		for _, a := range articles {
 			fileName := file.Filenamify(a.Title) + TSExtension
@@ -240,22 +243,28 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 	selectProduct(ctx, client)
 }
 
-type printPDFTask func(a geektime.ArticleSummary)
+type downloadSuccessPrinter struct {
+	mu sync.Mutex
+	i  int
+}
 
-func printPDFworker(limit int, t printPDFTask) chan<- geektime.ArticleSummary {
-	ch := make(chan geektime.ArticleSummary)
-	for i := 0; i < limit; i++ {
-		go func() {
-			for {
-				a, ok := <-ch
-				if !ok {
-					return
-				}
-				t(a)
-			}
-		}()
-	}
-	return ch
+func (p *downloadSuccessPrinter) print(total int) {
+	p.mu.Lock()
+	p.i++
+	fmt.Printf("\r已完成下载%d/%d", p.i, total)
+	p.mu.Unlock()
+}
+
+func printPDF(ctx context.Context, ch chan geektime.ArticleSummary, wg *sync.WaitGroup, folder string, cookies []*http.Cookie, total int, printer *downloadSuccessPrinter) {
+	defer wg.Done()
+
+	for a := range ch {
+		aid := a.AID
+		fileName := file.Filenamify(a.Title) + PDFExtension
+		fileFullPath := filepath.Join(folder, fileName)
+		chromedp.PrintArticlePageToPDF(ctx, aid, fileFullPath, cookies)
+		printer.print(total)
+	}	
 }
 
 func loadProducts(client *resty.Client) {
