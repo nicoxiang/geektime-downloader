@@ -19,10 +19,9 @@ import (
 	"github.com/briandowns/spinner"
 	"github.com/go-resty/resty/v2"
 	"github.com/manifoldco/promptui"
+	"github.com/nicoxiang/geektime-downloader/internal/chromedp"
 	"github.com/nicoxiang/geektime-downloader/internal/client"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
-
-	"github.com/nicoxiang/geektime-downloader/internal/chromedp"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/file"
 	"github.com/nicoxiang/geektime-downloader/internal/video"
 	"github.com/spf13/cobra"

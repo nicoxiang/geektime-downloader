@@ -18,7 +18,7 @@ geektime-downloader 支持下载专栏为 PDF 文档和下载视频课。
 go install github.com/nicoxiang/geektime-downloader@latest
 
 # Go version < 1.16
-go get -u github.com/nicoxiang/geektime-downloader
+go get -u github.com/nicoxiang/geektime-downloader@latest
 ```
 
 ### Download binary files
