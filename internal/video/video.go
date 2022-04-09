@@ -98,8 +98,10 @@ func writeToTempVideoFile(ctx context.Context, ch chan string, wg *sync.WaitGrou
 				panic(err)
 			}
 			written, err := io.Copy(f, resp.RawBody())
-			err = resp.RawBody().Close()
 			if err != nil && !errors.Is(err, context.Canceled) {
+				panic(err)
+			}
+			if err = resp.RawBody().Close(); err != nil {
 				panic(err)
 			}
 			addBar(bar, written)

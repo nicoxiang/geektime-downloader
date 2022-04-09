@@ -42,12 +42,12 @@ func GetProductList(client *resty.Client) ([]Product, error) {
 	if !Auth(client.Cookies) {
 		return nil, ErrAuthFailed
 	}
-	var products []Product = make([]Product, 0)
-	addProducts(client, 0, &products)
+	var products []Product
+	products = appendProducts(client, 0, products)
 	return products, nil
 }
 
-func addProducts(client *resty.Client, prev int, products *[]Product) {
+func appendProducts(client *resty.Client, prev int, products []Product) []Product {
 	var result ProductRequest
 	_, err := client.R().
 		SetBody(
@@ -73,7 +73,7 @@ func addProducts(client *resty.Client, prev int, products *[]Product) {
 		for _, v := range result.Data.Products {
 			// For now we can only download column and video
 			if v.Type == "c1" || v.Type == "c3" {
-				*products = append(*products, Product{
+				products = append(products, Product{
 					ID:         v.ID,
 					Title:      v.Title,
 					AuthorName: v.Author.Name,
@@ -83,8 +83,9 @@ func addProducts(client *resty.Client, prev int, products *[]Product) {
 		}
 		if result.Data.Page.More {
 			score := result.Data.List[0].Score
-			addProducts(client, score, products)
+			products = appendProducts(client, score, products)
 		}
+		return products
 	} else {
 		panic("make geektime product api call failed")
 	}
