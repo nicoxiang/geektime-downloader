@@ -6,7 +6,6 @@ import (
 	"crypto/cipher"
 	"errors"
 	"fmt"
-	"io"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -16,7 +15,8 @@ import (
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
-	"github.com/nicoxiang/geektime-downloader/internal/client"
+	"github.com/go-resty/resty/v2"
+	mclient "github.com/nicoxiang/geektime-downloader/internal/client"
 	cfile "github.com/nicoxiang/geektime-downloader/internal/pkg/file"
 )
 
@@ -61,7 +61,7 @@ func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder st
 
 	for i := 0; i < concurrency; i++ {
 		go func() {
-			writeToTempVideoFile(ctx, ch, &wg, bar, tsURLPrefix, tempVideoDir)
+			writeToTempVideoFile(ctx, ch, bar, &wg, tsURLPrefix, tempVideoDir)
 		}()
 	}
 
@@ -76,47 +76,30 @@ func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder st
 	mergeTSFiles(ctx, tempVideoDir, filenamifyTitle, downloadProjectFolder, key)
 }
 
-func writeToTempVideoFile(ctx context.Context, ch chan string, wg *sync.WaitGroup, bar *pb.ProgressBar, tsURLPrefix, tempVideoDir string) {
+func writeToTempVideoFile(ctx context.Context, ch chan string, bar *pb.ProgressBar, wg *sync.WaitGroup, tsURLPrefix, tempVideoDir string) {
 	defer wg.Done()
 
 	for tsFileName := range ch {
-		if cancelled(ctx) {
-			continue
-		}
-		tsURL := tsURLPrefix + tsFileName
-		resp, err := client.NewNoParseResponseRestyClient().R().SetContext(ctx).Get(tsURL)
+		c := resty.New()
+		c.SetOutputDirectory(tempVideoDir)
+		mclient.SetGeekBangHeaders(c)
+
+		resp, err := c.R().
+			SetContext(ctx).
+			SetOutput(tsFileName).
+			Get(tsURLPrefix + tsFileName)
 		if err != nil {
 			if errors.Is(err, context.Canceled) {
 				continue
 			}
 			panic(err)
 		}
-		if resp.RawResponse != nil && resp.RawResponse.StatusCode == 200 && resp.RawResponse.ContentLength > 0 {
-			t := filepath.Join(tempVideoDir, tsFileName)
-			f, err := os.OpenFile(t, os.O_CREATE|os.O_WRONLY, 0644)
-			if err != nil {
-				panic(err)
-			}
-			written, err := io.Copy(f, resp.RawBody())
-			if err != nil && !errors.Is(err, context.Canceled) {
-				panic(err)
-			}
-			if err = resp.RawBody().Close(); err != nil {
-				panic(err)
-			}
-			addBar(bar, written)
-			if err := f.Close(); err != nil {
-				panic(err)
-			}
-		}
+		addBarValue(bar, resp.Size())
 	}
 }
 
 func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFileNames []string) {
-	if cancelled(ctx) {
-		return "", nil
-	}
-	resp, err := client.New().R().SetContext(ctx).Get(url)
+	resp, err := mclient.New().R().SetContext(ctx).Get(url)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			panic(err)
@@ -154,7 +137,7 @@ func mergeTSFiles(ctx context.Context, tempVideoDir, filenamifyTitle, downloadPr
 		panic(err)
 	}
 	for _, tempTSFile := range tempTSFiles {
-		f, err := os.ReadFile(filepath.Join(tempVideoDir, tempTSFile.Name()))
+		f, err := ioutil.ReadFile(filepath.Join(tempVideoDir, tempTSFile.Name()))
 		if err != nil {
 			panic(err)
 		}
@@ -177,11 +160,11 @@ func mergeTSFiles(ctx context.Context, tempVideoDir, filenamifyTitle, downloadPr
 	}
 }
 
-func getDecryptKey(ctx context.Context, decryptkmsURL string) ([]byte) {
+func getDecryptKey(ctx context.Context, decryptkmsURL string) []byte {
 	if cancelled(ctx) {
 		return nil
 	}
-	keyResp, err := client.New().R().SetContext(ctx).Get(decryptkmsURL)
+	keyResp, err := mclient.New().R().SetContext(ctx).Get(decryptkmsURL)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) {
 			panic(err)
@@ -218,7 +201,7 @@ func newBar(size int64, prefix string) *pb.ProgressBar {
 }
 
 // total bytes may greater than expected
-func addBar(bar *pb.ProgressBar, written int64) {
+func addBarValue(bar *pb.ProgressBar, written int64) {
 	if bar.Current()+written > bar.Total() {
 		bar.SetCurrent(bar.Total())
 	} else {

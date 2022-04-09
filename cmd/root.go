@@ -217,7 +217,7 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 				printPDF(ctx, ch, &wg, folder, client.Cookies, len(articles), &p)
 			}()
 		}
-		
+
 		for _, a := range articles {
 			fileName := file.Filenamify(a.Title) + PDFExtension
 			if _, ok := downloaded[fileName]; ok {
@@ -234,6 +234,9 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 			fileName := file.Filenamify(a.Title) + TSExtension
 			if _, ok := downloaded[fileName]; ok {
 				continue
+			}
+			if cancelled(ctx) {
+				os.Exit(1)
 			}
 			videoInfo, err := geektime.GetVideoInfo(a.AID, "ld", client)
 			checkGeekTimeError(err)
@@ -264,7 +267,7 @@ func printPDF(ctx context.Context, ch chan geektime.ArticleSummary, wg *sync.Wai
 		fileFullPath := filepath.Join(folder, fileName)
 		chromedp.PrintArticlePageToPDF(ctx, aid, fileFullPath, cookies)
 		printer.print(total)
-	}	
+	}
 }
 
 func loadProducts(client *resty.Client) {
@@ -361,6 +364,15 @@ func checkPromptError(err error) {
 func exit(msg string, args ...interface{}) {
 	fmt.Fprintf(os.Stderr, msg+"\n", args...)
 	os.Exit(1)
+}
+
+func cancelled(ctx context.Context) bool {
+	select {
+	case <-ctx.Done():
+		return true
+	default:
+		return false
+	}
 }
 
 // Execute ...
