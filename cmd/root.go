@@ -23,6 +23,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/client"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/file"
+	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/video"
 	"github.com/spf13/cobra"
 )
@@ -35,6 +36,8 @@ const (
 
 var (
 	phone               string
+	gcid                string
+	gcess               string
 	concurrency         int
 	downloadFolder      string
 	sp                  *spinner.Spinner
@@ -48,8 +51,9 @@ func init() {
 	defaultConcurency := int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
 	defaultDownloadFolder := filepath.Join(userHomeDir, file.GeektimeDownloaderFolder)
 
-	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)(required)")
-	_ = rootCmd.MarkFlagRequired("phone")
+	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)")
+	rootCmd.Flags().StringVarP(&gcid, "gcid", "", "", "极客时间 cookie 值 gcid")
+	rootCmd.Flags().StringVarP(&gcess, "gcess", "", "", "极客时间 cookie 值 gcess")
 	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "专栏和视频课的下载目标位置")
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "c", defaultConcurency, "下载并发数")
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
@@ -64,7 +68,14 @@ var rootCmd = &cobra.Command{
 		if quality != "ld" && quality != "sd" && quality != "hd" {
 			exit("argument 'quality' is not valid")
 		}
-		readCookies := file.ReadCookieFromConfigFile(phone)
+		var readCookies []*http.Cookie
+		if phone != "" {
+			readCookies = file.ReadCookieFromConfigFile(phone)
+		} else if gcid != "" && gcess != "" {
+			readCookies = readCookiesFromInput()
+		} else {
+			exit("argument 'phone' or cookie value is not valid")
+		}
 		if readCookies == nil {
 			prompt := promptui.Prompt{
 				Label: "请输入密码",
@@ -334,6 +345,26 @@ func isColumn() bool {
 
 func isVideo() bool {
 	return products[currentProductIndex].Type == "c3"
+}
+
+func readCookiesFromInput() []*http.Cookie {
+	oneyear := time.Now().Add(180 * 24 * time.Hour)
+	cookies := make([]*http.Cookie, 2)
+	m := make(map[string]string)
+	m[pgt.GCID] = gcid
+	m[pgt.GCESS] = gcess
+	c := 0
+	for k, v := range m {
+		cookies[c] = &http.Cookie{
+			Name:     k,
+			Value:    v,
+			Domain:   pgt.GeekBangCookieDomain,
+			HttpOnly: true,
+			Expires:  oneyear,
+		}
+		c++
+	}
+	return cookies
 }
 
 func checkGeekTimeError(err error) {

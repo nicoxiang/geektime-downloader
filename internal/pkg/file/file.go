@@ -18,10 +18,6 @@ const (
 	MAXLENGTH = 80
 	// GeektimeDownloaderFolder app config and download root dolder name
 	GeektimeDownloaderFolder = "geektime-downloader"
-	// ExpireConfigLineKey in config file
-	ExpireConfigLineKey = "EXPIRE"
-	// ExpireLayout in config file
-	ExpireLayout = "Mon, 02 Jan 2006 15:04:05 -0700"
 )
 
 var userConfigDir string
@@ -54,7 +50,7 @@ func (nf ByNumericalFilename) Less(i, j int) bool {
 	return a < b
 }
 
-// ReadCookieFromConfigFile read cookies from app config file, if cookie has expired, delete old config file.
+// ReadCookieFromConfigFile read cookies from app config file.
 func ReadCookieFromConfigFile(phone string) []*http.Cookie {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
 	files, err := ioutil.ReadDir(dir)
@@ -86,10 +82,6 @@ func ReadCookieFromConfigFile(phone string) []*http.Cookie {
 				if len(s) != 2 {
 					continue
 				}
-				if s[0] == ExpireConfigLineKey && !checkExpire(s[1]) {
-					err := os.Remove(fullName)
-					panic(err)
-				}
 				cookies = append(cookies, &http.Cookie{
 					Name:     s[0],
 					Value:    s[1],
@@ -104,8 +96,7 @@ func ReadCookieFromConfigFile(phone string) []*http.Cookie {
 	return nil
 }
 
-// WriteCookieToConfigFile write cookies to config file with specified phone prefix file name,
-// and write cookie 'GCESS' expire date into config too.
+// WriteCookieToConfigFile write cookies to config file with specified phone prefix file name.
 func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
@@ -128,9 +119,6 @@ func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) {
 	defer file.Close()
 	var sb strings.Builder
 	for _, v := range cookies {
-		if v.Name == "GCESS" {
-			sb = writeOnelineConfig(sb, ExpireConfigLineKey, v.Expires.Format(ExpireLayout))
-		}
 		sb = writeOnelineConfig(sb, v.Name, v.Value)
 	}
 	if _, err := file.Write([]byte(sb.String())); err != nil {
@@ -185,17 +173,6 @@ func FindDownloadedArticleFileNames(projectDir string) map[string]struct{} {
 		res[f.Name()] = struct{}{}
 	}
 	return res
-}
-
-func checkExpire(value string) bool {
-	expire, err := time.Parse(ExpireLayout, value)
-	if err != nil {
-		return false
-	}
-	if time.Now().After(expire) {
-		return false
-	}
-	return true
 }
 
 func writeOnelineConfig(sb strings.Builder, key string, value string) strings.Builder {

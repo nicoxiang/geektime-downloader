@@ -8,7 +8,9 @@ import (
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
+// ErrWrongPassword ...
 var ErrWrongPassword = errors.New("密码错误, 请尝试重新登录")
+// ErrTooManyLoginAttemptTimes ...
 var ErrTooManyLoginAttemptTimes = errors.New("密码输入错误次数过多，已触发验证码校验，请稍后再试")
 
 // Login call geektime login api and return auth cookies
@@ -45,7 +47,7 @@ func Login(phone, password string) ([]*http.Cookie, error) {
 	if result.Code == 0 {
 		var cookies []*http.Cookie
 		for _, c := range loginResponse.Cookies() {
-			if c.Name == "GCID" || c.Name == "GCESS" {
+			if c.Name == pgt.GCID || c.Name == pgt.GCESS {
 				cookies = append(cookies, c)
 			}
 		}
