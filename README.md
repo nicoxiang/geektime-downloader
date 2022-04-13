@@ -29,7 +29,7 @@ See release page
 
 ```bash
 ## windows 为例
-## 密码方式登录
+## 账号密码方式登录（常用）
 > geektime-downloader.exe -u "phone number"
 ## cookie 方式登录
 > geektime-downloader.exe --gcid "gcid" --gcess "gcess"
