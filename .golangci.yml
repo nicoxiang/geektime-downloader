@@ -7,55 +7,10 @@ run:
     - _test.go
 
 linters:
-  # please, do not use `enable-all`: it's deprecated and will be removed soon.
-  # inverted configuration with `enable-all` and `disable` is not scalable during updates of golangci-lint
-  # enable-all: true
   disable-all: true
   enable:
-    - bodyclose
-    - contextcheck
-    - deadcode
-    - depguard
-    - decorder
-    - dogsled
-    - dupl
-    - durationcheck
-    - errcheck
-    - errorlint
-    - exhaustive
-    - exportloopref
-    - funlen
-    - gci
-    - gocognit
-    - goconst
-    - gocyclo
-    - goheader
-    - gomoddirectives
-    - gomodguard
-    - goprintffuncname
-    - gosec
     - gosimple
-    - govet
-    - ifshort
-    - importas
-    - ineffassign
-    - makezero
-    - misspell
-    - nakedret
-    - nestif
-    - nilerr
-    - noctx
-    - nolintlint
-    - prealloc
-    - predeclared
     - staticcheck
-    - structcheck
     - stylecheck
-    - typecheck
-    - unconvert
-    - unparam
     - unused
-    - varcheck
-    - wastedassign
-    - whitespace
   fast: false
