@@ -23,7 +23,7 @@ go get -u github.com/nicoxiang/geektime-downloader@latest
 
 ### Download binary files
 
-See release page
+See [release page](https://github.com/nicoxiang/geektime-downloader/releases)
 
 ### Sample
 
