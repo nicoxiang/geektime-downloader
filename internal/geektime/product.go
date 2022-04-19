@@ -13,7 +13,8 @@ type Product struct {
 	Articles   []ArticleSummary
 }
 
-type ProductRequest struct {
+// ProductResponse ...
+type ProductResponse struct {
 	Code int `json:"code"`
 	Data struct {
 		List []struct {
@@ -48,7 +49,7 @@ func GetProductList(client *resty.Client) ([]Product, error) {
 }
 
 func appendProducts(client *resty.Client, prev int, products []Product) []Product {
-	var result ProductRequest
+	var result ProductResponse
 	_, err := client.R().
 		SetBody(
 			map[string]interface{}{

@@ -14,16 +14,29 @@ var ErrAuthFailed = errors.New("当前账户在其他设备登录或者登录已
 
 // Auth check if current user login is expired or login in another device
 func Auth(cookies []*http.Cookie) bool {
+	var result struct {
+		Code  int `json:"code"`
+	}
 	t := fmt.Sprintf("%v", time.Now().Round(time.Millisecond).UnixNano()/(int64(time.Millisecond)/int64(time.Nanosecond)))
-	resp, err := client.NewTimeGeekAccountRestyClient().R().SetCookies(cookies).SetPathParam("t", t).Get("/serv/v1/user/auth")
+	resp, err := client.NewTimeGeekAccountRestyClient().R().
+		SetCookies(cookies).
+		SetPathParam("t", t).
+		SetResult(&result).
+		Get("/serv/v1/user/auth")
 
 	if err != nil {
 		panic(err)
 	}
 
 	if resp.StatusCode() == 200 {
-		return true
+		if result.Code == 0 {
+			return true
+		}else {
+			// result Code -1
+			// {\"error\":{\"msg\":\"未登录\",\"code\":-2000}
+			return false
+		}
 	}
-	// 452
+	// status code 452
 	return false
 }
