@@ -20,7 +20,10 @@ import (
 	cfile "github.com/nicoxiang/geektime-downloader/internal/pkg/file"
 )
 
-const syncByte = uint8(71) //0x47
+const (
+	syncByte = uint8(71) //0x47
+	tsExt    = ".ts"
+)
 
 // DownloadVideo ...
 func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder string, size int64, concurrency int) {
@@ -106,15 +109,14 @@ func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFile
 		}
 		return "", nil
 	}
-	data := resp.Body()
-	s := string(data)
+	s := string(resp.Body())
 	lines := strings.Split(s, "\n")
 	for _, line := range lines {
 		if strings.HasPrefix(line, "#EXT-X-KEY") {
 			i := strings.LastIndex(line, "URI=")
 			decryptkmsURL = line[i+5 : len(line)-1]
 		}
-		if !strings.HasPrefix(line, "#") && strings.HasSuffix(line, ".ts") {
+		if !strings.HasPrefix(line, "#") && strings.HasSuffix(line, tsExt) {
 			tsFileNames = append(tsFileNames, line)
 		}
 	}
@@ -131,8 +133,8 @@ func mergeTSFiles(ctx context.Context, tempVideoDir, filenamifyTitle, downloadPr
 		panic(err)
 	}
 	sort.Sort(cfile.ByNumericalFilename(tempTSFiles))
-	fullPath := filepath.Join(downloadProjectFolder, filenamifyTitle+".ts")
-	finalVideoFile, err := os.OpenFile(fullPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0644)
+	fullPath := filepath.Join(downloadProjectFolder, filenamifyTitle+tsExt)
+	finalVideoFile, err := os.OpenFile(fullPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		panic(err)
 	}
@@ -142,12 +144,7 @@ func mergeTSFiles(ctx context.Context, tempVideoDir, filenamifyTitle, downloadPr
 			panic(err)
 		}
 		aes128 := aesDecryptCBC(f, key, make([]byte, 16))
-		for j := 0; j < len(aes128); j++ {
-			if aes128[j] == syncByte {
-				aes128 = aes128[j:]
-				break
-			}
-		}
+		// https://en.wikipedia.org/wiki/MPEG_transport_stream
 		for j := 0; j < len(aes128); j++ {
 			if aes128[j] == syncByte {
 				aes128 = aes128[j:]
