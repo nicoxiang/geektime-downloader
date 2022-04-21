@@ -58,7 +58,7 @@ Flags:
 
 ## Note
 
-1. 文件下载目标位置可以通过 help 查看
+1. 文件下载目标位置可以通过 help 查看。默认情况下 windows 位于 %USERPROFILE%/geektime-downloader 下；Unix, 包括 macOS, 位于 $HOME/geektime-downloader 下
 
 2. Ctrl + C 退出程序
 
