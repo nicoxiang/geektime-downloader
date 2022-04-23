@@ -150,8 +150,12 @@ func RemoveConfig(phone string) {
 }
 
 // MkDownloadProjectFolder creates download project directory if not exist
-func MkDownloadProjectFolder(downloadFolder, phone, projectName string) string {
-	path := filepath.Join(downloadFolder, phone, Filenamify(projectName))
+func MkDownloadProjectFolder(downloadFolder, phone, gcid, projectName string) string {
+	userName := phone
+	if gcid != "" {
+		userName = gcid
+	}
+	path := filepath.Join(downloadFolder, userName, Filenamify(projectName))
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
 		panic(err)

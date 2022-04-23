@@ -1,4 +1,4 @@
-package chromedp
+package pdf
 
 import (
 	"context"
@@ -15,35 +15,61 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/device"
+	"github.com/go-resty/resty/v2"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
+// GeekTimeRateLimit ...
+var GeekTimeRateLimit = errors.New("已触发限流, 你可以选择重新登录/重新获取 cookie, 或者稍后再试, 然后生成剩余的文章")
+
+// AllocateBrowserInstance ...
+func AllocateBrowserInstance(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	chromedpCtx, chromedpCancelFunc := chromedp.NewContext(ctx)
+	return chromedpCtx, chromedpCancelFunc, chromedp.Run(chromedpCtx)
+}
+
 // PrintArticlePageToPDF use chromedp to print article page and save
-func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookies []*http.Cookie) {
-	ctx, cancel := chromedp.NewContext(ctx)
-	defer cancel()
+func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, client *resty.Client) error {
+	rateLimit := false
+	cctx, cancelFunc := context.WithCancel(ctx)
+	chromedp.ListenTarget(cctx, func(ev interface{}) {
+		switch responseReceivedEvent := ev.(type) {
+		case *network.EventResponseReceived:
+			response := responseReceivedEvent.Response
+			if response.URL == pgt.GeekBang+"/serv/v1/article" && response.Status == 451 {
+				rateLimit = true
+				cancelFunc()
+			}
+		}
+	})
 
 	var buf []byte
-	err := chromedp.Run(ctx,
+	err := chromedp.Run(cctx,
 		chromedp.Tasks{
 			chromedp.Emulate(device.IPadPro11),
-			setCookies(cookies),
-			navigateAndWaitFor(pgt.GeekBang+`/column/article/`+strconv.Itoa(aid), "networkIdle"),
+			setCookies(client.Cookies),
+			chromedp.Navigate(pgt.GeekBang + `/column/article/` + strconv.Itoa(aid)),
+			// wait for loading show
+			chromedp.WaitVisible("._loading_wrap_", chromedp.ByQuery),
+			// wait for loading disappear
+			chromedp.WaitNotPresent("._loading_wrap_", chromedp.ByQuery),
+			waitForImagesLoad(),
 			hideRedundantElements(),
 			printToPDF(&buf),
 		},
 	)
 
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			panic(err)
+		if rateLimit {
+			return GeekTimeRateLimit
 		}
-		os.Exit(1)
+		return err
 	}
 
 	if err := ioutil.WriteFile(filename, buf, os.ModePerm); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
 func setCookies(cookies []*http.Cookie) chromedp.ActionFunc {
@@ -75,6 +101,10 @@ func hideRedundantElements() chromedp.ActionFunc {
 				if(leadsMobileDiv){
 					leadsMobileDiv.style.display="none";
 				}
+				var unPreviewImage = document.querySelector('img[alt="unpreview"]')
+				if(unPreviewImage){
+					unPreviewImage.style.display="none"
+				}
 			`
 		_, exp, err := runtime.Evaluate(s).Do(ctx)
 		if err != nil {
@@ -100,15 +130,10 @@ func printToPDF(res *[]byte) chromedp.ActionFunc {
 	})
 }
 
-func navigateAndWaitFor(url string, eventName string) chromedp.ActionFunc {
-	return func(ctx context.Context) error {
-		_, _, _, err := page.Navigate(url).Do(ctx)
-		if err != nil {
-			return err
-		}
-
-		return waitFor(ctx, eventName)
-	}
+func waitForImagesLoad() chromedp.ActionFunc {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		return waitFor(ctx, "networkIdle")
+	})
 }
 
 // waitFor blocks until eventName is received.
