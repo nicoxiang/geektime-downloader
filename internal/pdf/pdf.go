@@ -19,8 +19,8 @@ import (
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
-// GeekTimeRateLimit ...
-var GeekTimeRateLimit = errors.New("已触发限流, 你可以选择重新登录/重新获取 cookie, 或者稍后再试, 然后生成剩余的文章")
+// ErrGeekTimeRateLimit ...
+var ErrGeekTimeRateLimit = errors.New("已触发限流, 你可以选择重新登录/重新获取 cookie, 或者稍后再试, 然后生成剩余的文章")
 
 // AllocateBrowserInstance ...
 func AllocateBrowserInstance(ctx context.Context) (context.Context, context.CancelFunc, error) {
@@ -61,7 +61,7 @@ func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, client
 
 	if err != nil {
 		if rateLimit {
-			return GeekTimeRateLimit
+			return ErrGeekTimeRateLimit
 		}
 		return err
 	}

@@ -377,7 +377,7 @@ func checkPdfError(err error) {
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
-		} else if errors.Is(err, pdf.GeekTimeRateLimit) {
+		} else if errors.Is(err, pdf.ErrGeekTimeRateLimit) {
 			file.RemoveConfig(phone)
 			fmt.Printf("\n%s", err.Error())
 			os.Exit(1)
