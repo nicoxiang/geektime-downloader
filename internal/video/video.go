@@ -26,10 +26,10 @@ const (
 )
 
 // ErrUnexpectedM3U8Format ...
-var ErrUnexpectedM3U8Format = errors.New("Unexpected m3u8 response format")
+var ErrUnexpectedM3U8Format = errors.New("unexpected m3u8 response format")
 
 // ErrUnexpectedDecryptKeyResponse ...
-var ErrUnexpectedDecryptKeyResponse = errors.New("Unexpected decrypt key response")
+var ErrUnexpectedDecryptKeyResponse = errors.New("unexpected decrypt key response")
 
 // DownloadVideo ...
 func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder string, size int64, concurrency int) (err error) {
