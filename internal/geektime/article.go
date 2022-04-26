@@ -4,6 +4,13 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
+const (
+	// ArticlesPath ...
+	ArticlesPath = "/serv/v1/column/articles"
+	// ArticleInfoPath ...
+	ArticleInfoPath = "/serv/v3/article/info"
+)
+
 // ArticleSummary ...
 type ArticleSummary struct {
 	AID   int
@@ -18,7 +25,11 @@ type VideoInfo struct {
 
 // GetArticles call geektime api to get article list
 func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
-	if !Auth(client.Cookies) {
+	ok, err := Auth(client.Cookies)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
 		return nil, ErrAuthFailed
 	}
 
@@ -31,7 +42,7 @@ func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
 			} `json:"list"`
 		} `json:"data"`
 	}
-	_, err := client.R().
+	_, err = client.R().
 		SetBody(
 			map[string]interface{}{
 				"cid":    cid,
@@ -41,10 +52,10 @@ func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
 				"size":   500,
 			}).
 		SetResult(&result).
-		Post("/serv/v1/column/articles")
+		Post(ArticlesPath)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	if result.Code == 0 {
@@ -57,13 +68,18 @@ func GetArticles(cid string, client *resty.Client) ([]ArticleSummary, error) {
 		}
 		return articles, nil
 	}
-	panic("make geektime articles api call failed")
+
+	return nil, ErrGeekTimeAPIBadCode{ArticlesPath, result.Code, ""}
 }
 
 // GetVideoInfo call geektime api to get video info
 func GetVideoInfo(aid int, quality string, client *resty.Client) (VideoInfo, error) {
 	var videoInfo VideoInfo
-	if !Auth(client.Cookies) {
+	ok, err := Auth(client.Cookies)
+	if err != nil {
+		return videoInfo, err
+	}
+	if !ok {
 		return videoInfo, ErrAuthFailed
 	}
 
@@ -83,16 +99,16 @@ func GetVideoInfo(aid int, quality string, client *resty.Client) (VideoInfo, err
 			} `json:"info"`
 		} `json:"data"`
 	}
-	_, err := client.R().
+	_, err = client.R().
 		SetBody(
 			map[string]interface{}{
 				"id": aid,
 			}).
 		SetResult(&result).
-		Post("/serv/v3/article/info")
+		Post(ArticleInfoPath)
 
 	if err != nil {
-		panic(err)
+		return videoInfo, err
 	}
 
 	if result.Code == 0 {
@@ -105,5 +121,6 @@ func GetVideoInfo(aid int, quality string, client *resty.Client) (VideoInfo, err
 			}
 		}
 	}
-	panic("make geektime article info api call failed")
+
+	return videoInfo, ErrGeekTimeAPIBadCode{ArticleInfoPath, result.Code, ""}
 }

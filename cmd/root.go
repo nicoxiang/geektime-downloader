@@ -63,15 +63,19 @@ var rootCmd = &cobra.Command{
 	Short: "Geektime-downloader is used to download geek time lessons",
 	Run: func(cmd *cobra.Command, args []string) {
 		if quality != "ld" && quality != "sd" && quality != "hd" {
-			exit("argument 'quality' is not valid")
+			exitWithMsg("argument 'quality' is not valid")
 		}
 		var readCookies []*http.Cookie
 		if phone != "" {
-			readCookies = file.ReadCookieFromConfigFile(phone)
+			rc, err := file.ReadCookieFromConfigFile(phone)
+			if err != nil {
+				exitWithError(err)
+			}
+			readCookies = rc
 		} else if gcid != "" && gcess != "" {
 			readCookies = readCookiesFromInput()
 		} else {
-			exit("argument 'phone' or cookie value is not valid")
+			exitWithMsg("argument 'phone' or cookie value is not valid")
 		}
 		if readCookies == nil {
 			prompt := promptui.Prompt{
@@ -93,7 +97,9 @@ var rootCmd = &cobra.Command{
 				sp.Stop()
 				checkGeekTimeError(err)
 			}
-			file.WriteCookieToConfigFile(phone, readCookies)
+			if err := file.WriteCookieToConfigFile(phone, readCookies); err != nil {
+				exitWithError(err)
+			}
 			sp.Stop()
 			fmt.Println("登录成功")
 		}
@@ -198,7 +204,10 @@ func handleSelectArticle(ctx context.Context, articles []geektime.ArticleSummary
 	}
 	a := articles[index-1]
 
-	projectDir := file.MkDownloadProjectFolder(downloadFolder, phone, gcid, products[currentProductIndex].Title)
+	projectDir, err := file.MkDownloadProjectFolder(downloadFolder, phone, gcid, products[currentProductIndex].Title)
+	if err != nil {
+		exitWithError(err)
+	}
 	downloadArticle(ctx, a, projectDir, client)
 	fmt.Printf("\r%s 下载完成", a.Title)
 	time.Sleep(time.Second)
@@ -209,8 +218,14 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 	cTitle := products[currentProductIndex].Title
 	articles := loadArticles(client)
 
-	folder := file.MkDownloadProjectFolder(downloadFolder, phone, gcid, cTitle)
-	downloaded := file.FindDownloadedArticleFileNames(folder)
+	folder, err := file.MkDownloadProjectFolder(downloadFolder, phone, gcid, cTitle)
+	if err != nil {
+		exitWithError(err)
+	}
+	downloaded, err := file.FindDownloadedArticleFileNames(folder)
+	if err != nil {
+		exitWithError(err)
+	}
 	if isColumn() {
 		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", cTitle)
 		total := len(articles)
@@ -230,7 +245,7 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 			if err := pdf.PrintArticlePageToPDF(chromedpCtx, a.AID, fileFullPath, client); err != nil {
 				// ensure chrome killed before os exit
 				cancelFunc()
-				checkPdfError(err)
+				checkGeekTimeError(err)
 			}
 			increasePdfCount(total, &i)
 		}
@@ -241,12 +256,10 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 			if _, ok := downloaded[fileName]; ok {
 				continue
 			}
-			if cancelled(ctx) {
-				os.Exit(1)
-			}
 			videoInfo, err := geektime.GetVideoInfo(a.AID, "ld", client)
 			checkGeekTimeError(err)
-			video.DownloadVideo(ctx, videoInfo.M3U8URL, a.Title, folder, int64(videoInfo.Size), concurrency)
+			err = video.DownloadVideo(ctx, videoInfo.M3U8URL, a.Title, folder, int64(videoInfo.Size), concurrency)
+			checkGeekTimeError(err)
 		}
 	}
 	selectProduct(ctx, client)
@@ -311,12 +324,13 @@ func downloadArticle(ctx context.Context, article geektime.ArticleSummary, proje
 		if err != nil {
 			// ensure chrome killed before os exit
 			cancelFunc()
-			checkPdfError(err)
+			checkGeekTimeError(err)
 		}
 	} else if isVideo() {
 		videoInfo, err := geektime.GetVideoInfo(article.AID, "ld", client)
 		checkGeekTimeError(err)
-		video.DownloadVideo(ctx, videoInfo.M3U8URL, article.Title, projectDir, int64(videoInfo.Size), concurrency)
+		err = video.DownloadVideo(ctx, videoInfo.M3U8URL, article.Title, projectDir, int64(videoInfo.Size), concurrency)
+		checkGeekTimeError(err)
 	}
 }
 
@@ -360,29 +374,26 @@ func readCookiesFromInput() []*http.Cookie {
 
 func checkGeekTimeError(err error) {
 	if err != nil {
-		if errors.Is(err, geektime.ErrAuthFailed) {
-			file.RemoveConfig(phone)
-			fmt.Print(err.Error())
-		} else if errors.Is(err, geektime.ErrWrongPassword) ||
-			errors.Is(err, geektime.ErrTooManyLoginAttemptTimes) {
-			fmt.Print(err.Error())
-		} else {
-			fmt.Fprintf(os.Stderr, "An error occurred: %v\n", err)
-		}
-		os.Exit(1)
-	}
-}
-
-func checkPdfError(err error) {
-	if err != nil {
 		if errors.Is(err, context.Canceled) {
 			os.Exit(1)
-		} else if errors.Is(err, pdf.ErrGeekTimeRateLimit) {
-			file.RemoveConfig(phone)
-			fmt.Printf("\n%s", err.Error())
+		} else if errors.Is(err, geektime.ErrWrongPassword) ||
+			errors.Is(err, geektime.ErrTooManyLoginAttemptTimes) {
+			exitWithMsg(err.Error())
+		} else if errors.Is(err, pdf.ErrGeekTimeRateLimit) ||
+			errors.Is(err, geektime.ErrAuthFailed) {
+			fmt.Fprintln(os.Stderr, err.Error())
+			if err := file.RemoveConfig(phone); err != nil {
+				fmt.Fprintln(os.Stderr, err.Error())
+			}
 			os.Exit(1)
+		} else if os.IsTimeout(err) {
+			exitWhenClientTimeout()
+		} else if _, ok := err.(*geektime.ErrGeekTimeAPIBadCode); ok {
+			exitWithMsg(err.Error())
+		} else {
+			// Client error, others
+			exitWithError(err)
 		}
-		panic(err)
 	}
 }
 
@@ -395,18 +406,19 @@ func checkPromptError(err error) {
 	}
 }
 
-func exit(msg string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, msg+"\n", args...)
+func exitWhenClientTimeout() {
+	exitWithMsg("Request Timeout")
+}
+
+// Unexpected error
+func exitWithError(err error) {
+	fmt.Fprintf(os.Stderr, "An error occurred: %v\n", err.Error())
 	os.Exit(1)
 }
 
-func cancelled(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
-	}
+func exitWithMsg(msg string, args ...interface{}) {
+	fmt.Fprintf(os.Stderr, msg+"\n", args...)
+	os.Exit(1)
 }
 
 // Execute ...
@@ -429,6 +441,6 @@ func Execute() {
 	}()
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
-		exit(err.Error())
+		exitWithError(err)
 	}
 }

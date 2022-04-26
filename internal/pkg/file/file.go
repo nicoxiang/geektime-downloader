@@ -51,17 +51,17 @@ func (nf ByNumericalFilename) Less(i, j int) bool {
 }
 
 // ReadCookieFromConfigFile read cookies from app config file.
-func ReadCookieFromConfigFile(phone string) []*http.Cookie {
+func ReadCookieFromConfigFile(phone string) ([]*http.Cookie, error) {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return nil
+			return nil, nil
 		}
-		panic(err)
+		return nil, err
 	}
 	if len(files) == 0 {
-		return nil
+		return nil, nil
 	}
 	for _, fi := range files {
 		if fi.IsDir() {
@@ -74,7 +74,7 @@ func ReadCookieFromConfigFile(phone string) []*http.Cookie {
 
 			data, err := ioutil.ReadFile(fullName)
 			if err != nil {
-				panic(err)
+				return nil, err
 			}
 
 			for _, line := range strings.Split(string(data), "\n") {
@@ -90,31 +90,31 @@ func ReadCookieFromConfigFile(phone string) []*http.Cookie {
 					Expires:  oneyear,
 				})
 			}
-			return cookies
+			return cookies, nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 // WriteCookieToConfigFile write cookies to config file with specified phone prefix file name.
-func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) {
+func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) error {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-		panic(err)
+		return err
 	}
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	for _, fi := range files {
 		// config file already exists
 		if strings.HasPrefix(fi.Name(), phone) {
-			return
+			return nil
 		}
 	}
 	file, err := ioutil.TempFile(dir, phone)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	defer file.Close()
 	var sb strings.Builder
@@ -122,19 +122,20 @@ func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) {
 		sb = writeOnelineConfig(sb, v.Name, v.Value)
 	}
 	if _, err := file.Write([]byte(sb.String())); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
 
 // RemoveConfig remove specified users' config
-func RemoveConfig(phone string) {
+func RemoveConfig(phone string) error {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	if len(files) == 0 {
-		return
+		return nil
 	}
 	for _, fi := range files {
 		if fi.IsDir() {
@@ -143,14 +144,15 @@ func RemoveConfig(phone string) {
 		if strings.HasPrefix(fi.Name(), phone) {
 			fullName := filepath.Join(userConfigDir, GeektimeDownloaderFolder, fi.Name())
 			if err := os.Remove(fullName); err != nil {
-				panic(err)
+				return err
 			}
 		}
 	}
+	return nil
 }
 
 // MkDownloadProjectFolder creates download project directory if not exist
-func MkDownloadProjectFolder(downloadFolder, phone, gcid, projectName string) string {
+func MkDownloadProjectFolder(downloadFolder, phone, gcid, projectName string) (string, error) {
 	userName := phone
 	if gcid != "" {
 		userName = gcid
@@ -158,25 +160,25 @@ func MkDownloadProjectFolder(downloadFolder, phone, gcid, projectName string) st
 	path := filepath.Join(downloadFolder, userName, Filenamify(projectName))
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
-		panic(err)
+		return "", err
 	}
-	return path
+	return path, nil
 }
 
 // FindDownloadedArticleFileNames find all downloaded articles file name in specified account and column
-func FindDownloadedArticleFileNames(projectDir string) map[string]struct{} {
+func FindDownloadedArticleFileNames(projectDir string) (map[string]struct{}, error) {
 	res := make(map[string]struct{})
 	files, err := ioutil.ReadDir(projectDir)
 	if err != nil {
-		panic(err)
+		return res, err
 	}
 	if len(files) == 0 {
-		return res
+		return res, nil
 	}
 	for _, f := range files {
 		res[f.Name()] = struct{}{}
 	}
-	return res
+	return res, nil
 }
 
 func writeOnelineConfig(sb strings.Builder, key string, value string) strings.Builder {

@@ -9,6 +9,7 @@ require (
 	github.com/chromedp/chromedp v0.8.0
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/spf13/cobra v1.4.0
+	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 )
 
 require (

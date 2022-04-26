@@ -8,6 +8,9 @@ import (
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
+// LoginPath ...
+const LoginPath = "/account/ticket/login"
+
 // ErrWrongPassword ...
 var ErrWrongPassword = errors.New("密码错误, 请尝试重新登录")
 // ErrTooManyLoginAttemptTimes ...
@@ -38,10 +41,10 @@ func Login(phone, password string) ([]*http.Cookie, error) {
 				"password":  password,
 			}).
 		SetResult(&result).
-		Post("/account/ticket/login")
+		Post(LoginPath)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	if result.Code == 0 {
@@ -57,5 +60,5 @@ func Login(phone, password string) ([]*http.Cookie, error) {
 	} else if result.Error.Code == -3005 {
 		return nil, ErrTooManyLoginAttemptTimes
 	}
-	panic(result.Error.Msg)
+	return nil, ErrGeekTimeAPIBadCode{LoginPath, result.Error.Code, result.Error.Msg} 
 }
