@@ -19,7 +19,8 @@ func NewTimeGeekRestyClient(cookies []*http.Cookie) *resty.Client {
 	c := resty.New().
 		SetBaseURL(pgt.GeekBang).
 		SetCookies(cookies).
-		SetRetryCount(1)
+		SetRetryCount(1).
+		SetTimeout(10 * time.Second)
 
 	SetGeekBangHeaders(c)
 	return c
@@ -29,7 +30,8 @@ func NewTimeGeekRestyClient(cookies []*http.Cookie) *resty.Client {
 func NewTimeGeekAccountRestyClient() *resty.Client {
 	if accountClient == nil {
 		accountClient = resty.New().
-			SetBaseURL(pgt.GeekBangAccount)
+			SetBaseURL(pgt.GeekBangAccount).
+			SetTimeout(10 * time.Second)
 
 		SetGeekBangHeaders(accountClient)
 	}
@@ -40,16 +42,17 @@ func NewTimeGeekAccountRestyClient() *resty.Client {
 func New() *resty.Client {
 	if simpleClient == nil {
 		simpleClient = resty.New().		
-			SetRetryCount(1)
+			SetRetryCount(1).
+			SetTimeout(10 * time.Second)
 
 		SetGeekBangHeaders(simpleClient)
 	}
 	return simpleClient
 }
 
+// SetGeekBangHeaders set geektime related headers
 func SetGeekBangHeaders(client *resty.Client) {
 	client.
 		SetHeader("User-Agent", UserAgent).
-		SetHeader("Origin", pgt.GeekBang).
-		SetTimeout(10 * time.Second)
+		SetHeader("Origin", pgt.GeekBang)
 }

@@ -11,13 +11,13 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/go-resty/resty/v2"
-	mclient "github.com/nicoxiang/geektime-downloader/internal/client"
-	cfile "github.com/nicoxiang/geektime-downloader/internal/pkg/file"
+	iclient "github.com/nicoxiang/geektime-downloader/internal/client"
+	ifile "github.com/nicoxiang/geektime-downloader/internal/pkg/file"
+	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -25,89 +25,115 @@ const (
 	tsExt    = ".ts"
 )
 
+// ErrUnexpectedM3U8Format ...
+var ErrUnexpectedM3U8Format = errors.New("Unexpected m3u8 response format")
+
+// ErrUnexpectedDecryptKeyResponse ...
+var ErrUnexpectedDecryptKeyResponse = errors.New("Unexpected decrypt key response")
+
 // DownloadVideo ...
-func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder string, size int64, concurrency int) {
+func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder string, size int64, concurrency int) (err error) {
 	i := strings.LastIndex(m3u8url, "/")
 	tsURLPrefix := m3u8url[:i+1]
-	filenamifyTitle := cfile.Filenamify(title)
+	filenamifyTitle := ifile.Filenamify(title)
 
 	// Stage1: Make m3u8 URL call and resolve
-	decryptkmsURL, tsFileNames := readM3U8File(ctx, m3u8url)
-	if decryptkmsURL == "" || len(tsFileNames) == 0 {
+	decryptkmsURL, tsFileNames, err := readM3U8File(ctx, m3u8url)
+	if err != nil {
 		return
+	}
+	if decryptkmsURL == "" || len(tsFileNames) == 0 {
+		return ErrUnexpectedM3U8Format
 	}
 
 	// Stage2: Get decrypt key
-	key := getDecryptKey(ctx, decryptkmsURL)
-	if key == nil {
+	key, err := getDecryptKey(ctx, decryptkmsURL)
+	if err != nil {
 		return
+	}
+	if key == nil {
+		return ErrUnexpectedDecryptKeyResponse
 	}
 
 	// Stage3: Make temp ts folder and download temp ts files
 	tempVideoDir := filepath.Join(downloadProjectFolder, filenamifyTitle)
-	if err := os.MkdirAll(tempVideoDir, os.ModePerm); err != nil {
-		panic(err)
+	if err = os.MkdirAll(tempVideoDir, os.ModePerm); err != nil {
+		return
 	}
+	// temp folder cleanup
 	defer func() {
-		if err := os.RemoveAll(tempVideoDir); err != nil {
-			panic(err)
-		}
+		os.RemoveAll(tempVideoDir)
 	}()
 
 	// classic bounded work pooling pattern
-	var wg sync.WaitGroup
-	wg.Add(concurrency)
+	g := new(errgroup.Group)
 	ch := make(chan string, concurrency)
 
 	bar := newBar(size, fmt.Sprintf("[正在下载 %s] ", title))
 	bar.Start()
 
 	for i := 0; i < concurrency; i++ {
-		go func() {
-			writeToTempVideoFile(ctx, ch, bar, &wg, tsURLPrefix, tempVideoDir)
-		}()
+		g.Go(func() error {
+			return writeToTempVideoFile(ctx, ch, bar, tsURLPrefix, tempVideoDir)
+		})
 	}
 
 	for _, tsFileName := range tsFileNames {
 		ch <- tsFileName
 	}
 	close(ch)
-	wg.Wait()
+	err = g.Wait()
 	bar.Finish()
+	if err != nil {
+		return
+	}
 
 	// Stage4: Read temp ts files, decrypt and merge into the one final video file
-	mergeTSFiles(ctx, tempVideoDir, filenamifyTitle, downloadProjectFolder, key)
+	err = mergeTSFiles(tempVideoDir, filenamifyTitle, downloadProjectFolder, key)
+
+	return
 }
 
-func writeToTempVideoFile(ctx context.Context, ch chan string, bar *pb.ProgressBar, wg *sync.WaitGroup, tsURLPrefix, tempVideoDir string) {
-	defer wg.Done()
+func writeToTempVideoFile(ctx context.Context, tsFileNames chan string, bar *pb.ProgressBar, tsURLPrefix, tempVideoDir string) (err error) {
+	var es []error
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			// Drain tsFileNames to allow existing goroutines to finish.
+			for range tsFileNames {
+			}
+		case tsFileName, ok := <-tsFileNames:
+			if !ok {
+				break loop
+			}
+			c := resty.New()
+			c.SetOutputDirectory(tempVideoDir).
+				SetTimeout(time.Minute)
 
-	for tsFileName := range ch {
-		c := resty.New()
-		c.SetOutputDirectory(tempVideoDir)
-		mclient.SetGeekBangHeaders(c)
+			iclient.SetGeekBangHeaders(c)
 
-		resp, err := c.R().
-			SetContext(ctx).
-			SetOutput(tsFileName).
-			Get(tsURLPrefix + tsFileName)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
+			resp, err := c.R().
+				SetContext(ctx).
+				SetOutput(tsFileName).
+				Get(tsURLPrefix + tsFileName)
+			if err != nil {
+				es = append(es, err)
 				continue
 			}
-			panic(err)
+			addBarValue(bar, resp.Size())
 		}
-		addBarValue(bar, resp.Size())
 	}
+	if len(es) > 0{
+		return es[0]
+	} 
+	return nil
 }
 
-func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFileNames []string) {
-	resp, err := mclient.New().R().SetContext(ctx).Get(url)
+func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFileNames []string, err error) {
+	resp, err := iclient.New().R().SetContext(ctx).Get(url)
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			panic(err)
-		}
-		return "", nil
+		return
 	}
 	s := string(resp.Body())
 	lines := strings.Split(s, "\n")
@@ -123,25 +149,21 @@ func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFile
 	return
 }
 
-func mergeTSFiles(ctx context.Context, tempVideoDir, filenamifyTitle, downloadProjectFolder string, key []byte) {
-	if cancelled(ctx) {
-		return
-	}
-
+func mergeTSFiles(tempVideoDir, filenamifyTitle, downloadProjectFolder string, key []byte) error {
 	tempTSFiles, err := ioutil.ReadDir(tempVideoDir)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	sort.Sort(cfile.ByNumericalFilename(tempTSFiles))
+	sort.Sort(ifile.ByNumericalFilename(tempTSFiles))
 	fullPath := filepath.Join(downloadProjectFolder, filenamifyTitle+tsExt)
 	finalVideoFile, err := os.OpenFile(fullPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, os.ModePerm)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	for _, tempTSFile := range tempTSFiles {
 		f, err := ioutil.ReadFile(filepath.Join(tempVideoDir, tempTSFile.Name()))
 		if err != nil {
-			panic(err)
+			return err
 		}
 		aes128 := aesDecryptCBC(f, key, make([]byte, 16))
 		// https://en.wikipedia.org/wiki/MPEG_transport_stream
@@ -152,23 +174,18 @@ func mergeTSFiles(ctx context.Context, tempVideoDir, filenamifyTitle, downloadPr
 			}
 		}
 		if _, err := finalVideoFile.Write(aes128); err != nil {
-			panic(err)
+			return err
 		}
 	}
+	return nil
 }
 
-func getDecryptKey(ctx context.Context, decryptkmsURL string) []byte {
-	if cancelled(ctx) {
-		return nil
-	}
-	keyResp, err := mclient.New().R().SetContext(ctx).Get(decryptkmsURL)
+func getDecryptKey(ctx context.Context, decryptkmsURL string) (key []byte, err error) {
+	keyResp, err := iclient.New().R().SetContext(ctx).Get(decryptkmsURL)
 	if err != nil {
-		if !errors.Is(err, context.Canceled) {
-			panic(err)
-		}
-		return nil
+		return
 	}
-	return keyResp.Body()
+	return keyResp.Body(), nil
 }
 
 func aesDecryptCBC(encrypted, key, iv []byte) (decrypted []byte) {
@@ -203,14 +220,5 @@ func addBarValue(bar *pb.ProgressBar, written int64) {
 		bar.SetCurrent(bar.Total())
 	} else {
 		bar.Add64(written)
-	}
-}
-
-func cancelled(ctx context.Context) bool {
-	select {
-	case <-ctx.Done():
-		return true
-	default:
-		return false
 	}
 }

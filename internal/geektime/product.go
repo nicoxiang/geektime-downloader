@@ -4,6 +4,9 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
+// ProductPath ...
+const ProductPath = "/serv/v3/learn/product"
+
 // Product ...
 type Product struct {
 	ID         int
@@ -40,15 +43,22 @@ type ProductResponse struct {
 
 // GetProductList call geektime api to get product list
 func GetProductList(client *resty.Client) ([]Product, error) {
-	if !Auth(client.Cookies) {
+	ok, err := Auth(client.Cookies)
+	if err != nil {
+		return nil, err
+	}
+	if !ok {
 		return nil, ErrAuthFailed
 	}
 	var products []Product
-	products = appendProducts(client, 0, products)
+	products, err = appendProducts(client, 0, products)
+	if err != nil {
+		return nil, err
+	}
 	return products, nil
 }
 
-func appendProducts(client *resty.Client, prev int, products []Product) []Product {
+func appendProducts(client *resty.Client, prev int, products []Product) ([]Product, error) {
 	var result ProductResponse
 	_, err := client.R().
 		SetBody(
@@ -64,10 +74,10 @@ func appendProducts(client *resty.Client, prev int, products []Product) []Produc
 				"with_learn_count": 1,
 			}).
 		SetResult(&result).
-		Post("/serv/v3/learn/product")
+		Post(ProductPath)
 
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	if result.Code == 0 {
@@ -84,10 +94,13 @@ func appendProducts(client *resty.Client, prev int, products []Product) []Produc
 		}
 		if result.Data.Page.More {
 			score := result.Data.List[0].Score
-			products = appendProducts(client, score, products)
+			products, err = appendProducts(client, score, products)
+			if err != nil {
+				return nil, err
+			}
 		}
-		return products
-	} else {
-		panic("make geektime product api call failed")
+		return products, nil
 	}
+
+	return nil, ErrGeekTimeAPIBadCode{ProductPath, result.Code, ""}
 }
