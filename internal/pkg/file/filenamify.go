@@ -6,47 +6,49 @@ import (
 	"strings"
 )
 
-// MaxFileNameLength ...
-const MaxFileNameLength = 100
+const (
+	// MaxFileNameLength ...
+	MaxFileNameLength = 100
+	// Replacement for special chars
+	Replacement = "-"
+)
 
 // Filenamify convert a string to a valid safe filename
 func Filenamify(str string) string {
 	// remove empty
 	str = strings.Join(strings.Fields(str), "")
 
-	replacement := "-"
-
 	reControlCharsRegex := regexp.MustCompile("[\u0000-\u001f\u0080-\u009f]")
 
 	reRelativePathRegex := regexp.MustCompile(`^\.+`)
 
-	// https://github.com/sindresorhus/filename-reserved-regex/blob/master/index.js
-	filenameReservedRegex := regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
-	filenameReservedWindowsNamesRegex := regexp.MustCompile(`(?i)^(con|prn|aux|nul|com[0-9]|lpt[0-9])$`)
+	// https://stackoverflow.com/a/31976060/5685258
+	forbiddenWindowsCharsRegex := regexp.MustCompile(`[<>:"/\\|?*\x00-\x1F]`)
+	reservedWindowsNamesRegex := regexp.MustCompile(`(?i)^(con|prn|aux|nul|com[0-9]|lpt[0-9])$`)
 
 	// reserved word
-	str = filenameReservedRegex.ReplaceAllString(str, replacement)
+	str = forbiddenWindowsCharsRegex.ReplaceAllString(str, Replacement)
 
 	// continue
-	str = reControlCharsRegex.ReplaceAllString(str, replacement)
-	str = reRelativePathRegex.ReplaceAllString(str, replacement)
+	str = reControlCharsRegex.ReplaceAllString(str, Replacement)
+	str = reRelativePathRegex.ReplaceAllString(str, Replacement)
 
 	// for repeat
-	if len(replacement) > 0 {
-		str = trimRepeated(str, replacement)
+	if len(Replacement) > 0 {
+		str = trimRepeated(str, Replacement)
 
 		if len(str) > 1 {
-			str = stripOuter(str, replacement)
+			str = stripOuter(str, Replacement)
 		}
 	}
 
 	// for windows names
-	if filenameReservedWindowsNamesRegex.MatchString(str) {
-		str = str + replacement
+	if reservedWindowsNamesRegex.MatchString(str) {
+		str = str + Replacement
 	}
 
 	// limit length
-	strBuf := []byte(str)
+	strBuf := []rune(str)
 	strBuf = strBuf[0:int(math.Min(float64(MaxFileNameLength), float64(len(strBuf))))]
 
 	return string(strBuf)

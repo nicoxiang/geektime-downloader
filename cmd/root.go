@@ -258,7 +258,7 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 			}
 			videoInfo, err := geektime.GetVideoInfo(a.AID, "ld", client)
 			checkGeekTimeError(err)
-			err = video.DownloadVideo(ctx, videoInfo.M3U8URL, a.Title, folder, int64(videoInfo.Size), concurrency)
+			err = video.DownloadVideo(ctx, videoInfo.M3U8URL, fileName, folder, int64(videoInfo.Size), concurrency)
 			checkGeekTimeError(err)
 		}
 	}
@@ -329,7 +329,7 @@ func downloadArticle(ctx context.Context, article geektime.ArticleSummary, proje
 	} else if isVideo() {
 		videoInfo, err := geektime.GetVideoInfo(article.AID, "ld", client)
 		checkGeekTimeError(err)
-		err = video.DownloadVideo(ctx, videoInfo.M3U8URL, article.Title, projectDir, int64(videoInfo.Size), concurrency)
+		err = video.DownloadVideo(ctx, videoInfo.M3U8URL, fileName, projectDir, int64(videoInfo.Size), concurrency)
 		checkGeekTimeError(err)
 	}
 }

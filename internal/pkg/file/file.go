@@ -14,8 +14,6 @@ import (
 )
 
 const (
-	// MAXLENGTH Max file name length
-	MAXLENGTH = 80
 	// GeektimeDownloaderFolder app config and download root dolder name
 	GeektimeDownloaderFolder = "geektime-downloader"
 )

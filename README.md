@@ -28,7 +28,9 @@ See [release page](https://github.com/nicoxiang/geektime-downloader/releases)
 ### Sample
 
 ```bash
-## windows 为例
+## Windows 为例
+## Windows 推荐使用 Windows Terminal 打开
+
 ## 账号密码方式登录（常用）
 > geektime-downloader.exe -u "phone number"
 ## cookie 方式登录
@@ -38,7 +40,7 @@ See [release page](https://github.com/nicoxiang/geektime-downloader/releases)
 ### Help
 
 ```bash
-## windows 为例
+## Windows 为例
 > geektime-downloader.exe -h
 
 Geektime-downloader is used to download geek time lessons
@@ -57,7 +59,7 @@ Flags:
 
 ## Note
 
-1. 文件下载目标位置可以通过 help 查看。默认情况下 windows 位于 %USERPROFILE%/geektime-downloader 下；Unix, 包括 macOS, 位于 $HOME/geektime-downloader 下
+1. 文件下载目标位置可以通过 help 查看。默认情况下 Windows 位于 %USERPROFILE%/geektime-downloader 下；Unix, 包括 macOS, 位于 $HOME/geektime-downloader 下
 
 2. Ctrl + C 退出程序
 

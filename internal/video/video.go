@@ -22,7 +22,6 @@ import (
 
 const (
 	syncByte = uint8(71) //0x47
-	tsExt    = ".ts"
 )
 
 // ErrUnexpectedM3U8Format ...
@@ -32,10 +31,10 @@ var ErrUnexpectedM3U8Format = errors.New("unexpected m3u8 response format")
 var ErrUnexpectedDecryptKeyResponse = errors.New("unexpected decrypt key response")
 
 // DownloadVideo ...
-func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder string, size int64, concurrency int) (err error) {
+func DownloadVideo(ctx context.Context, m3u8url, fileName, downloadProjectFolder string, size int64, concurrency int) (err error) {
 	i := strings.LastIndex(m3u8url, "/")
 	tsURLPrefix := m3u8url[:i+1]
-	filenamifyTitle := ifile.Filenamify(title)
+	filenamifyTitle := strings.TrimSuffix(fileName, filepath.Ext(fileName))
 
 	// Stage1: Make m3u8 URL call and resolve
 	decryptkmsURL, tsFileNames, err := readM3U8File(ctx, m3u8url)
@@ -69,7 +68,7 @@ func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder st
 	g := new(errgroup.Group)
 	ch := make(chan string, concurrency)
 
-	bar := newBar(size, fmt.Sprintf("[正在下载 %s] ", title))
+	bar := newBar(size, fmt.Sprintf("[正在下载 %s] ", filenamifyTitle))
 	bar.Start()
 
 	for i := 0; i < concurrency; i++ {
@@ -89,7 +88,7 @@ func DownloadVideo(ctx context.Context, m3u8url, title, downloadProjectFolder st
 	}
 
 	// Stage4: Read temp ts files, decrypt and merge into the one final video file
-	err = mergeTSFiles(tempVideoDir, filenamifyTitle, downloadProjectFolder, key)
+	err = mergeTSFiles(tempVideoDir, fileName, downloadProjectFolder, key)
 
 	return
 }
@@ -124,9 +123,9 @@ loop:
 			addBarValue(bar, resp.Size())
 		}
 	}
-	if len(es) > 0{
+	if len(es) > 0 {
 		return es[0]
-	} 
+	}
 	return nil
 }
 
@@ -142,20 +141,20 @@ func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFile
 			i := strings.LastIndex(line, "URI=")
 			decryptkmsURL = line[i+5 : len(line)-1]
 		}
-		if !strings.HasPrefix(line, "#") && strings.HasSuffix(line, tsExt) {
+		if !strings.HasPrefix(line, "#") && strings.HasSuffix(line, ".ts") {
 			tsFileNames = append(tsFileNames, line)
 		}
 	}
 	return
 }
 
-func mergeTSFiles(tempVideoDir, filenamifyTitle, downloadProjectFolder string, key []byte) error {
+func mergeTSFiles(tempVideoDir, fileName, downloadProjectFolder string, key []byte) error {
 	tempTSFiles, err := ioutil.ReadDir(tempVideoDir)
 	if err != nil {
 		return err
 	}
 	sort.Sort(ifile.ByNumericalFilename(tempTSFiles))
-	fullPath := filepath.Join(downloadProjectFolder, filenamifyTitle+tsExt)
+	fullPath := filepath.Join(downloadProjectFolder, fileName)
 	finalVideoFile, err := os.OpenFile(fullPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return err
