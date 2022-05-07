@@ -15,7 +15,6 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/device"
-	"github.com/go-resty/resty/v2"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
@@ -29,7 +28,7 @@ func AllocateBrowserInstance(ctx context.Context) (context.Context, context.Canc
 }
 
 // PrintArticlePageToPDF use chromedp to print article page and save
-func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, client *resty.Client) error {
+func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookies []*http.Cookie) error {
 	rateLimit := false
 	cctx, cancelFunc := context.WithCancel(ctx)
 	chromedp.ListenTarget(cctx, func(ev interface{}) {
@@ -47,7 +46,7 @@ func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, client
 	err := chromedp.Run(cctx,
 		chromedp.Tasks{
 			chromedp.Emulate(device.IPadPro11),
-			setCookies(client.Cookies),
+			setCookies(cookies),
 			chromedp.Navigate(pgt.GeekBang + `/column/article/` + strconv.Itoa(aid)),
 			// wait for loading show
 			chromedp.WaitVisible("._loading_wrap_", chromedp.ByQuery),

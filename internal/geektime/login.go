@@ -3,18 +3,21 @@ package geektime
 import (
 	"errors"
 	"net/http"
+	"time"
 
-	"github.com/nicoxiang/geektime-downloader/internal/client"
+	"github.com/go-resty/resty/v2"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
 // LoginPath ...
 const LoginPath = "/account/ticket/login"
 
-// ErrWrongPassword ...
-var ErrWrongPassword = errors.New("密码错误, 请尝试重新登录")
-// ErrTooManyLoginAttemptTimes ...
-var ErrTooManyLoginAttemptTimes = errors.New("密码输入错误次数过多，已触发验证码校验，请稍后再试")
+var (
+	// ErrWrongPassword ...
+	ErrWrongPassword = errors.New("密码错误, 请尝试重新登录")
+	// ErrTooManyLoginAttemptTimes ...
+	ErrTooManyLoginAttemptTimes = errors.New("密码输入错误次数过多，已触发验证码校验，请稍后再试")
+)
 
 // Login call geektime login api and return auth cookies
 func Login(phone, password string) ([]*http.Cookie, error) {
@@ -30,8 +33,13 @@ func Login(phone, password string) ([]*http.Cookie, error) {
 		} `json:"error"`
 	}
 
-	loginResponse, err := client.NewTimeGeekAccountRestyClient().R().
+	loginResponse, err := resty.New().
+		SetBaseURL(pgt.GeekBangAccount).
+		SetTimeout(10*time.Second).
+		SetHeader(UserAgentHeaderName, UserAgent).
+		SetHeader(OriginHeaderName, pgt.GeekBang).
 		SetHeader("Referer", pgt.GeekBangAccount+"/signin?redirect=https%3A%2F%2Ftime.geekbang.org%2F").
+		R().
 		SetBody(
 			map[string]interface{}{
 				"country":   86,
@@ -60,5 +68,5 @@ func Login(phone, password string) ([]*http.Cookie, error) {
 	} else if result.Error.Code == -3005 {
 		return nil, ErrTooManyLoginAttemptTimes
 	}
-	return nil, ErrGeekTimeAPIBadCode{LoginPath, result.Error.Code, result.Error.Msg} 
+	return nil, ErrGeekTimeAPIBadCode{LoginPath, result.Error.Code, result.Error.Msg}
 }

@@ -165,8 +165,8 @@ func MkDownloadProjectFolder(downloadFolder, phone, gcid, projectName string) (s
 
 // FindDownloadedArticleFileNames find all downloaded articles file name in specified account and column
 func FindDownloadedArticleFileNames(projectDir string) (map[string]struct{}, error) {
-	res := make(map[string]struct{})
 	files, err := ioutil.ReadDir(projectDir)
+	res := make(map[string]struct{}, len(files))
 	if err != nil {
 		return res, err
 	}

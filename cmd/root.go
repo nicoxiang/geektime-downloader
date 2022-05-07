@@ -15,9 +15,7 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
-	"github.com/go-resty/resty/v2"
 	"github.com/manifoldco/promptui"
-	"github.com/nicoxiang/geektime-downloader/internal/client"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pdf"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/file"
@@ -103,13 +101,13 @@ var rootCmd = &cobra.Command{
 			sp.Stop()
 			fmt.Println("登录成功")
 		}
-		client := client.NewTimeGeekRestyClient(readCookies)
-		selectProduct(cmd.Context(), client)
+		geektime.InitClient(readCookies)
+		selectProduct(cmd.Context())
 	},
 }
 
-func selectProduct(ctx context.Context, client *resty.Client) {
-	loadProducts(client)
+func selectProduct(ctx context.Context) {
+	loadProducts()
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
 		Active:   "\U00002714 {{if eq .Type `c1`}} {{ `专栏` | red }} {{else}} {{ `视频课` | red }} {{end}} {{ .Title | red }} {{ .AuthorName | red }}",
@@ -125,10 +123,10 @@ func selectProduct(ctx context.Context, client *resty.Client) {
 	index, _, err := prompt.Run()
 	checkPromptError(err)
 	currentProductIndex = index
-	handleSelectProduct(ctx, client)
+	handleSelectProduct(ctx)
 }
 
-func handleSelectProduct(ctx context.Context, client *resty.Client) {
+func handleSelectProduct(ctx context.Context) {
 	currentProduct := products[currentProductIndex]
 	type option struct {
 		Text  string
@@ -157,23 +155,23 @@ func handleSelectProduct(ctx context.Context, client *resty.Client) {
 	}
 	index, _, err := prompt.Run()
 	checkPromptError(err)
-	handleSelectProductOps(ctx, index, client)
+	handleSelectProductOps(ctx, index)
 }
 
-func handleSelectProductOps(ctx context.Context, option int, client *resty.Client) {
+func handleSelectProductOps(ctx context.Context, option int) {
 	switch option {
 	case 0:
-		selectProduct(ctx, client)
+		selectProduct(ctx)
 	case 1:
-		handleDownloadAll(ctx, client)
+		handleDownloadAll(ctx)
 	case 2:
-		selectArticle(ctx, client)
+		selectArticle(ctx)
 	}
 }
 
-func selectArticle(ctx context.Context, client *resty.Client) {
-	articles := loadArticles(client)
-	items := []geektime.ArticleSummary{
+func selectArticle(ctx context.Context) {
+	articles := loadArticles()
+	items := []geektime.Article{
 		{
 			AID:   -1,
 			Title: "返回上一级",
@@ -195,12 +193,12 @@ func selectArticle(ctx context.Context, client *resty.Client) {
 	}
 	index, _, err := prompt.Run()
 	checkPromptError(err)
-	handleSelectArticle(ctx, articles, index, client)
+	handleSelectArticle(ctx, articles, index)
 }
 
-func handleSelectArticle(ctx context.Context, articles []geektime.ArticleSummary, index int, client *resty.Client) {
+func handleSelectArticle(ctx context.Context, articles []geektime.Article, index int) {
 	if index == 0 {
-		handleSelectProduct(ctx, client)
+		handleSelectProduct(ctx)
 	}
 	a := articles[index-1]
 
@@ -208,15 +206,15 @@ func handleSelectArticle(ctx context.Context, articles []geektime.ArticleSummary
 	if err != nil {
 		exitWithError(err)
 	}
-	downloadArticle(ctx, a, projectDir, client)
+	downloadArticle(ctx, a, projectDir)
 	fmt.Printf("\r%s 下载完成", a.Title)
 	time.Sleep(time.Second)
-	selectArticle(ctx, client)
+	selectArticle(ctx)
 }
 
-func handleDownloadAll(ctx context.Context, client *resty.Client) {
+func handleDownloadAll(ctx context.Context) {
 	cTitle := products[currentProductIndex].Title
-	articles := loadArticles(client)
+	articles := loadArticles()
 
 	folder, err := file.MkDownloadProjectFolder(downloadFolder, phone, gcid, cTitle)
 	if err != nil {
@@ -242,7 +240,7 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 				continue
 			}
 			fileFullPath := filepath.Join(folder, fileName)
-			if err := pdf.PrintArticlePageToPDF(chromedpCtx, a.AID, fileFullPath, client); err != nil {
+			if err := pdf.PrintArticlePageToPDF(chromedpCtx, a.AID, fileFullPath, geektime.SiteCookies); err != nil {
 				// ensure chrome killed before os exit
 				cancelFunc()
 				checkGeekTimeError(err)
@@ -256,13 +254,13 @@ func handleDownloadAll(ctx context.Context, client *resty.Client) {
 			if _, ok := downloaded[fileName]; ok {
 				continue
 			}
-			videoInfo, err := geektime.GetVideoInfo(a.AID, "ld", client)
+			videoInfo, err := geektime.GetVideoInfo(a.AID, "ld")
 			checkGeekTimeError(err)
 			err = video.DownloadVideo(ctx, videoInfo.M3U8URL, fileName, folder, int64(videoInfo.Size), concurrency)
 			checkGeekTimeError(err)
 		}
 	}
-	selectProduct(ctx, client)
+	selectProduct(ctx)
 }
 
 func increasePdfCount(total int, i *int) {
@@ -270,13 +268,13 @@ func increasePdfCount(total int, i *int) {
 	fmt.Printf("\r已完成下载%d/%d", *i, total)
 }
 
-func loadProducts(client *resty.Client) {
+func loadProducts() {
 	if len(products) > 0 {
 		return
 	}
 	sp.Prefix = "[ 正在加载已购买课程列表... ]"
 	sp.Start()
-	p, err := geektime.GetProductList(client)
+	p, err := geektime.GetProductList()
 	if err != nil {
 		sp.Stop()
 		checkGeekTimeError(err)
@@ -290,12 +288,12 @@ func loadProducts(client *resty.Client) {
 	sp.Stop()
 }
 
-func loadArticles(client *resty.Client) []geektime.ArticleSummary {
+func loadArticles() []geektime.Article {
 	p := products[currentProductIndex]
 	if len(p.Articles) <= 0 {
 		sp.Prefix = "[ 正在加载文章列表... ]"
 		sp.Start()
-		articles, err := geektime.GetArticles(strconv.Itoa(p.ID), client)
+		articles, err := geektime.GetArticles(strconv.Itoa(p.ID))
 		checkGeekTimeError(err)
 		products[currentProductIndex].Articles = articles
 		sp.Stop()
@@ -303,7 +301,7 @@ func loadArticles(client *resty.Client) []geektime.ArticleSummary {
 	return products[currentProductIndex].Articles
 }
 
-func downloadArticle(ctx context.Context, article geektime.ArticleSummary, projectDir string, client *resty.Client) {
+func downloadArticle(ctx context.Context, article geektime.Article, projectDir string) {
 	fileName := getDownloadFileName(article)
 	fileFullPath := filepath.Join(projectDir, fileName)
 
@@ -318,7 +316,7 @@ func downloadArticle(ctx context.Context, article geektime.ArticleSummary, proje
 		err = pdf.PrintArticlePageToPDF(chromedpCtx,
 			article.AID,
 			fileFullPath,
-			client,
+			geektime.SiteCookies,
 		)
 		sp.Stop()
 		if err != nil {
@@ -327,14 +325,14 @@ func downloadArticle(ctx context.Context, article geektime.ArticleSummary, proje
 			checkGeekTimeError(err)
 		}
 	} else if isVideo() {
-		videoInfo, err := geektime.GetVideoInfo(article.AID, "ld", client)
+		videoInfo, err := geektime.GetVideoInfo(article.AID, "ld")
 		checkGeekTimeError(err)
 		err = video.DownloadVideo(ctx, videoInfo.M3U8URL, fileName, projectDir, int64(videoInfo.Size), concurrency)
 		checkGeekTimeError(err)
 	}
 }
 
-func getDownloadFileName(article geektime.ArticleSummary) string {
+func getDownloadFileName(article geektime.Article) string {
 	var ext string
 	if isColumn() {
 		ext = PDFExtension
@@ -355,7 +353,7 @@ func isVideo() bool {
 func readCookiesFromInput() []*http.Cookie {
 	oneyear := time.Now().Add(180 * 24 * time.Hour)
 	cookies := make([]*http.Cookie, 2)
-	m := make(map[string]string)
+	m := make(map[string]string, 2)
 	m[pgt.GCID] = gcid
 	m[pgt.GCESS] = gcess
 	c := 0

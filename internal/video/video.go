@@ -11,24 +11,45 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/go-resty/resty/v2"
-	iclient "github.com/nicoxiang/geektime-downloader/internal/client"
-	ifile "github.com/nicoxiang/geektime-downloader/internal/pkg/file"
+	pf "github.com/nicoxiang/geektime-downloader/internal/pkg/file"
+	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
 	syncByte = uint8(71) //0x47
+	userAgentHeaderName = "User-Agent"
+	originHeaderName = "Origin"
+	userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.92 Safari/537.36"
 )
 
-// ErrUnexpectedM3U8Format ...
-var ErrUnexpectedM3U8Format = errors.New("unexpected m3u8 response format")
+var clientOnce struct {
+	sync.Once
+	c *resty.Client
+}
 
-// ErrUnexpectedDecryptKeyResponse ...
-var ErrUnexpectedDecryptKeyResponse = errors.New("unexpected decrypt key response")
+var (
+	// ErrUnexpectedM3U8Format ...
+	ErrUnexpectedM3U8Format = errors.New("unexpected m3u8 response format")
+	// ErrUnexpectedDecryptKeyResponse ...
+	ErrUnexpectedDecryptKeyResponse = errors.New("unexpected decrypt key response")
+)
+
+func getClient() *resty.Client {
+	clientOnce.Do(func() {
+		clientOnce.c = resty.New().
+			SetRetryCount(1).
+			SetTimeout(10*time.Second).
+			SetHeader(userAgentHeaderName, userAgent).
+			SetHeader(originHeaderName, pgt.GeekBang)
+	})
+	return clientOnce.c
+}
 
 // DownloadVideo ...
 func DownloadVideo(ctx context.Context, m3u8url, fileName, downloadProjectFolder string, size int64, concurrency int) (err error) {
@@ -108,9 +129,9 @@ loop:
 			}
 			c := resty.New()
 			c.SetOutputDirectory(tempVideoDir).
-				SetTimeout(time.Minute)
-
-			iclient.SetGeekBangHeaders(c)
+				SetTimeout(time.Minute).
+				SetHeader(userAgentHeaderName, userAgent).
+				SetHeader(originHeaderName, pgt.GeekBang)
 
 			resp, err := c.R().
 				SetContext(ctx).
@@ -130,7 +151,7 @@ loop:
 }
 
 func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFileNames []string, err error) {
-	resp, err := iclient.New().R().SetContext(ctx).Get(url)
+	resp, err := getClient().R().SetContext(ctx).Get(url)
 	if err != nil {
 		return
 	}
@@ -153,7 +174,7 @@ func mergeTSFiles(tempVideoDir, fileName, downloadProjectFolder string, key []by
 	if err != nil {
 		return err
 	}
-	sort.Sort(ifile.ByNumericalFilename(tempTSFiles))
+	sort.Sort(pf.ByNumericalFilename(tempTSFiles))
 	fullPath := filepath.Join(downloadProjectFolder, fileName)
 	finalVideoFile, err := os.OpenFile(fullPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, os.ModePerm)
 	if err != nil {
@@ -180,7 +201,7 @@ func mergeTSFiles(tempVideoDir, fileName, downloadProjectFolder string, key []by
 }
 
 func getDecryptKey(ctx context.Context, decryptkmsURL string) (key []byte, err error) {
-	keyResp, err := iclient.New().R().SetContext(ctx).Get(decryptkmsURL)
+	keyResp, err := getClient().R().SetContext(ctx).Get(decryptkmsURL)
 	if err != nil {
 		return
 	}
