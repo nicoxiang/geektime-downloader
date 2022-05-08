@@ -56,7 +56,7 @@ func init() {
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "c", defaultConcurency, "下载并发数")
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 
-	sp = spinner.New(spinner.CharSets[70], 100*time.Millisecond)
+	sp = spinner.New(spinner.CharSets[4], 100*time.Millisecond)
 }
 
 var rootCmd = &cobra.Command{
@@ -113,7 +113,7 @@ func selectProduct(ctx context.Context) {
 	loadProducts()
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
-		Active:   "\U00002714 {{if eq .Type `c1`}} {{ `专栏` | red }} {{else}} {{ `视频课` | red }} {{end}} {{ .Title | red }} {{ .AuthorName | red }}",
+		Active:   "{{ `>` | red }} {{if eq .Type `c1`}} {{ `专栏` | red }} {{else}} {{ `视频课` | red }} {{end}} {{ .Title | red }} {{ .AuthorName | red }}",
 		Inactive: "{{if eq .Type `c1`}} {{ `专栏` }} {{else}} {{ `视频课` }} {{end}} {{ .Title }} {{ .AuthorName }}",
 	}
 	prompt := promptui.Select{
@@ -146,7 +146,7 @@ func handleSelectProduct(ctx context.Context) {
 	}
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
-		Active:   "\U00002714 {{ .Text | red }}",
+		Active:   "{{ `>` | red }} {{ .Text | red }}",
 		Inactive: "{{if eq .Value 0}} {{ .Text | green }} {{else}} {{ .Text }} {{end}}",
 	}
 	prompt := promptui.Select{
@@ -183,7 +183,7 @@ func selectArticle(ctx context.Context) {
 	items = append(items, articles...)
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
-		Active:   "\U00002714 {{ .Title | red }}",
+		Active:   "{{ `>` | red }} {{ .Title | red }}",
 		Inactive: "{{if eq .AID -1}} {{ .Title | green }} {{else}} {{ .Title }} {{end}}",
 	}
 	prompt := promptui.Select{
