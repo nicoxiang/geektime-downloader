@@ -23,27 +23,33 @@ var ErrGeekTimeRateLimit = errors.New("已触发限流, 你可以选择重新登
 
 // AllocateBrowserInstance ...
 func AllocateBrowserInstance(ctx context.Context) (context.Context, context.CancelFunc, error) {
+	// create a new browser
 	chromedpCtx, chromedpCancelFunc := chromedp.NewContext(ctx)
+	// start the browser
 	return chromedpCtx, chromedpCancelFunc, chromedp.Run(chromedpCtx)
 }
 
 // PrintArticlePageToPDF use chromedp to print article page and save
 func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookies []*http.Cookie) error {
 	rateLimit := false
-	cctx, cancelFunc := context.WithCancel(ctx)
-	chromedp.ListenTarget(cctx, func(ev interface{}) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// new tab
+	ctx, cancel = chromedp.NewContext(ctx)
+	defer cancel()
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		switch responseReceivedEvent := ev.(type) {
 		case *network.EventResponseReceived:
 			response := responseReceivedEvent.Response
 			if response.URL == pgt.GeekBang+"/serv/v1/article" && response.Status == 451 {
 				rateLimit = true
-				cancelFunc()
+				cancel()
 			}
 		}
 	})
 
 	var buf []byte
-	err := chromedp.Run(cctx,
+	err := chromedp.Run(ctx,
 		chromedp.Tasks{
 			chromedp.Emulate(device.IPadPro11),
 			setCookies(cookies),

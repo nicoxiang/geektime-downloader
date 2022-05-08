@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/briandowns/spinner"
@@ -22,6 +23,7 @@ import (
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/video"
 	"github.com/spf13/cobra"
+	"golang.org/x/sync/errgroup"
 )
 
 // File extension
@@ -44,13 +46,14 @@ var (
 
 func init() {
 	userHomeDir, _ := os.UserHomeDir()
-	concurrency = int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
+	defaultConcurency := int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
 	defaultDownloadFolder := filepath.Join(userHomeDir, file.GeektimeDownloaderFolder)
 
 	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)")
-	rootCmd.Flags().StringVarP(&gcid, "gcid", "", "", "极客时间 cookie 值 gcid")
-	rootCmd.Flags().StringVarP(&gcess, "gcess", "", "", "极客时间 cookie 值 gcess")
+	rootCmd.Flags().StringVar(&gcid, "gcid", "", "极客时间 cookie 值 gcid")
+	rootCmd.Flags().StringVar(&gcess, "gcess", "", "极客时间 cookie 值 gcess")
 	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "专栏和视频课的下载目标位置")
+	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "c", defaultConcurency, "下载并发数")
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 
 	sp = spinner.New(spinner.CharSets[70], 100*time.Millisecond)
@@ -227,27 +230,28 @@ func handleDownloadAll(ctx context.Context) {
 	if isColumn() {
 		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", cTitle)
 		total := len(articles)
-		var i int
-		chromedpCtx, cancelFunc, err := pdf.AllocateBrowserInstance(ctx)
-		if err != nil {
-			panic(err)
+		p := downloadSuccessPrinter{i: 0}
+
+		// classic bounded work pooling pattern
+		g := new(errgroup.Group)
+		ch := make(chan geektime.Article, concurrency)
+		for i := 0; i < concurrency; i++ {
+			g.Go(func() error {
+				return runPDFGeneratorWorker(ctx, ch, folder, total, &p)
+			})
 		}
-		defer cancelFunc()
+
 		for _, a := range articles {
 			fileName := getDownloadFileName(a)
 			if _, ok := downloaded[fileName]; ok {
-				increasePdfCount(total, &i)
+				p.print(total)
 				continue
 			}
-			fileFullPath := filepath.Join(folder, fileName)
-			if err := pdf.PrintArticlePageToPDF(chromedpCtx, a.AID, fileFullPath, geektime.SiteCookies); err != nil {
-				// ensure chrome killed before os exit
-				cancelFunc()
-				checkGeekTimeError(err)
-			}
-			increasePdfCount(total, &i)
+			ch <- a
 		}
-
+		close(ch)
+		err = g.Wait()
+		checkGeekTimeError(err)
 	} else if isVideo() {
 		for _, a := range articles {
 			fileName := getDownloadFileName(a)
@@ -263,9 +267,53 @@ func handleDownloadAll(ctx context.Context) {
 	selectProduct(ctx)
 }
 
-func increasePdfCount(total int, i *int) {
-	(*i)++
-	fmt.Printf("\r已完成下载%d/%d", *i, total)
+type downloadSuccessPrinter struct {
+	mu sync.Mutex
+	i  int
+}
+
+func (p *downloadSuccessPrinter) print(total int) {
+	p.mu.Lock()
+	p.i++
+	fmt.Printf("\r已完成下载%d/%d", p.i, total)
+	p.mu.Unlock()
+}
+
+func runPDFGeneratorWorker(ctx context.Context, articles chan geektime.Article, folder string, total int, printer *downloadSuccessPrinter) error {
+	chromedpCtx, cancel, err := pdf.AllocateBrowserInstance(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+
+	var es []error
+loop:
+	for {
+		select {
+		case <-chromedpCtx.Done():
+			// Drain articles to allow existing goroutines to finish.
+			for range articles {
+			}
+		case a, ok := <-articles:
+			if !ok {
+				break loop
+			}
+
+			fileFullPath := filepath.Join(folder, getDownloadFileName(a))
+			err = pdf.PrintArticlePageToPDF(chromedpCtx, a.AID, fileFullPath, geektime.SiteCookies)
+			if err != nil {
+				cancel()
+				es = append(es, err)
+				continue
+			}
+			printer.print(total)
+		}
+	}
+	// Only the first error is ErrGeekTimeRateLimit, second one is canceled error
+	if len(es) > 0 {
+		return es[0]
+	}
+	return nil
 }
 
 func loadProducts() {
@@ -379,6 +427,12 @@ func checkGeekTimeError(err error) {
 			exitWithMsg(err.Error())
 		} else if errors.Is(err, pdf.ErrGeekTimeRateLimit) ||
 			errors.Is(err, geektime.ErrAuthFailed) {
+
+			// New line after print pdf success msg
+			if errors.Is(err, pdf.ErrGeekTimeRateLimit) {
+				fmt.Println()
+			}
+
 			fmt.Fprintln(os.Stderr, err.Error())
 			if err := file.RemoveConfig(phone); err != nil {
 				fmt.Fprintln(os.Stderr, err.Error())
