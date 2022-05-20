@@ -49,6 +49,7 @@ Usage:
   geektime-downloader [flags]
 
 Flags:
+      --comments          是否需要专栏的第一页评论 (default true)
   -c, --concurrency int   下载并发数 (default 4)
   -f, --folder string     专栏和视频课的下载目标位置 (default "")
       --gcess string      极客时间 cookie 值 gcess

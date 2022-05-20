@@ -30,7 +30,7 @@ func AllocateBrowserInstance(ctx context.Context) (context.Context, context.Canc
 }
 
 // PrintArticlePageToPDF use chromedp to print article page and save
-func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookies []*http.Cookie) error {
+func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookies []*http.Cookie, downloadComments bool) error {
 	rateLimit := false
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -59,7 +59,7 @@ func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookie
 			// wait for loading disappear
 			chromedp.WaitNotPresent("._loading_wrap_", chromedp.ByQuery),
 			waitForImagesLoad(),
-			hideRedundantElements(),
+			hideRedundantElements(downloadComments),
 			printToPDF(&buf),
 		},
 	)
@@ -91,26 +91,39 @@ func setCookies(cookies []*http.Cookie) chromedp.ActionFunc {
 	})
 }
 
-func hideRedundantElements() chromedp.ActionFunc {
+func hideRedundantElements(downloadComments bool) chromedp.ActionFunc {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
-		s := `
-				var openAppdiv = document.getElementsByClassName('openApp')[0];
-				if(openAppdiv){
-					openAppdiv.parentNode.parentNode.style.display="none";
-				}
-				var audioBarDiv = document.getElementsByClassName('audio-float-bar')[0];
-				if(audioBarDiv){
-					audioBarDiv.style.display="none";
-				}
-				var leadsMobileDiv = document.getElementsByClassName('leads mobile')[0];
-				if(leadsMobileDiv){
-					leadsMobileDiv.style.display="none";
-				}
-				var unPreviewImage = document.querySelector('img[alt="unpreview"]')
-				if(unPreviewImage){
-					unPreviewImage.style.display="none"
-				}
-			`
+		s := 
+		`
+			var openAppdiv = document.getElementsByClassName('openApp')[0];
+			if(openAppdiv){
+				openAppdiv.parentNode.parentNode.style.display="none";
+			}
+			var audioBarDiv = document.getElementsByClassName('audio-float-bar')[0];
+			if(audioBarDiv){
+				audioBarDiv.style.display="none";
+			}
+			var leadsMobileDiv = document.getElementsByClassName('leads mobile')[0];
+			if(leadsMobileDiv){
+				leadsMobileDiv.style.display="none";
+			}
+			var unPreviewImage = document.querySelector('img[alt="unpreview"]')
+			if(unPreviewImage){
+				unPreviewImage.style.display="none"
+			}
+		`
+
+		hideCommentsExpression := 
+		`
+			var comments = document.querySelector('div[class^="Index_articleComments"]')
+			if(comments){
+				comments.style.display="none"
+			}
+		`
+		if !downloadComments {
+			s = s + hideCommentsExpression
+		}
+
 		_, exp, err := runtime.Evaluate(s).Do(ctx)
 		if err != nil {
 			return err
