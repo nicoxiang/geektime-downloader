@@ -99,45 +99,37 @@ func hideRedundantElements(downloadComments bool) chromedp.ActionFunc {
 			if(openAppdiv){
 				openAppdiv.parentNode.parentNode.parentNode.style.display="none";
 			}
-			var audioPlayer = document.querySelectorAll('div[class^="ColumnArticleMiniAudioPlayer"]')[0];
+			var audioPlayer = document.querySelector('div[class^="ColumnArticleMiniAudioPlayer"]');
 			if(audioPlayer){
 				audioPlayer.style.display="none"
 			}
-			var leadsMobileDiv = document.getElementsByClassName('leads mobile')[0];
-			if(leadsMobileDiv){
-				leadsMobileDiv.style.display="none";
-			}
-			var unPreviewImage = document.querySelector('img[alt="unpreview"]')
-			if(unPreviewImage){
-				unPreviewImage.style.display="none"
-			}
-			var gotoColumn = document.querySelectorAll('div[class^="Index_articleColumn"]')[0];
-			if(gotoColumn){
-				gotoColumn.style.display="none"
-			}
-			var favBtn = document.querySelectorAll('div[class*="Index_favBtn"]')[0];
-			if(favBtn){
-				favBtn.style.display="none"
-			}
-			var leadsWrapper = document.getElementsByClassName('leads-wrapper')[0];
+			var leadsWrapper = document.querySelector('div[class^="leads-wrapper"]');
 			if(leadsWrapper){
 				leadsWrapper.style.display="none";
 			}
-			var likeModule = document.querySelectorAll('div[class^="ArticleLikeModuleMobile"]')[0];
+			var unPreviewImage = document.querySelector('img[alt="unpreview"]');
+			if(unPreviewImage){
+				unPreviewImage.style.display="none"
+			}
+			var gotoColumn = document.querySelector('div[class^="Index_articleColumn"]');
+			if(gotoColumn){
+				gotoColumn.style.display="none"
+			}
+			var favBtn = document.querySelector('div[class*="Index_favBtn"]');
+			if(favBtn){
+				favBtn.style.display="none"
+			}
+			var likeModule = document.querySelector('div[class^="ArticleLikeModuleMobile"]');
 			if(likeModule){
 				likeModule.style.display="none"
 			}
-			var copyright = document.querySelectorAll('div[class^="Index_copyright"]')[0];
-			if(copyright){
-				copyright.style.display="none"
-			}
-			var switchBtns = document.querySelectorAll('div[class^="Index_switchBtns"]')[0];
+			var switchBtns = document.querySelector('div[class^="Index_switchBtns"]');
 			if(switchBtns){
 				switchBtns.style.display="none"
 			}
-			var subBottom = document.querySelectorAll('div[class^="sub-bottom-wrapper"]')[0];
-			if(subBottom){
-				subBottom.style.display="none"
+			var writeComment = document.querySelector('div[class*="Index_writeComment"]');
+			if(writeComment){
+				writeComment.style.display="none"
 			}
 		`
 
