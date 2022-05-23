@@ -260,7 +260,7 @@ func handleDownloadAll(ctx context.Context) {
 			if _, ok := downloaded[fileName]; ok {
 				continue
 			}
-			videoInfo, err := geektime.GetVideoInfo(a.AID, "ld")
+			videoInfo, err := geektime.GetVideoInfo(a.AID, quality)
 			checkGeekTimeError(err)
 			err = video.DownloadVideo(ctx, videoInfo.M3U8URL, fileName, folder, int64(videoInfo.Size), concurrency)
 			checkGeekTimeError(err)
@@ -381,7 +381,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 			checkGeekTimeError(err)
 		}
 	} else if isVideo() {
-		videoInfo, err := geektime.GetVideoInfo(article.AID, "ld")
+		videoInfo, err := geektime.GetVideoInfo(article.AID, quality)
 		checkGeekTimeError(err)
 		err = video.DownloadVideo(ctx, videoInfo.M3U8URL, fileName, projectDir, int64(videoInfo.Size), concurrency)
 		checkGeekTimeError(err)
