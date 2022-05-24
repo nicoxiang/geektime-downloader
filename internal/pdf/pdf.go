@@ -93,28 +93,48 @@ func setCookies(cookies []*http.Cookie) chromedp.ActionFunc {
 
 func hideRedundantElements(downloadComments bool) chromedp.ActionFunc {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
-		s := 
-		`
+		s :=
+			`
 			var openAppdiv = document.getElementsByClassName('openApp')[0];
 			if(openAppdiv){
-				openAppdiv.parentNode.parentNode.style.display="none";
+				openAppdiv.parentNode.parentNode.parentNode.style.display="none";
 			}
-			var audioBarDiv = document.getElementsByClassName('audio-float-bar')[0];
-			if(audioBarDiv){
-				audioBarDiv.style.display="none";
+			var audioPlayer = document.querySelector('div[class^="ColumnArticleMiniAudioPlayer"]');
+			if(audioPlayer){
+				audioPlayer.style.display="none"
 			}
-			var leadsMobileDiv = document.getElementsByClassName('leads mobile')[0];
-			if(leadsMobileDiv){
-				leadsMobileDiv.style.display="none";
+			var leadsWrapper = document.querySelector('div[class^="leads-wrapper"]');
+			if(leadsWrapper){
+				leadsWrapper.style.display="none";
 			}
-			var unPreviewImage = document.querySelector('img[alt="unpreview"]')
+			var unPreviewImage = document.querySelector('img[alt="unpreview"]');
 			if(unPreviewImage){
 				unPreviewImage.style.display="none"
 			}
+			var gotoColumn = document.querySelector('div[class^="Index_articleColumn"]');
+			if(gotoColumn){
+				gotoColumn.style.display="none"
+			}
+			var favBtn = document.querySelector('div[class*="Index_favBtn"]');
+			if(favBtn){
+				favBtn.style.display="none"
+			}
+			var likeModule = document.querySelector('div[class^="ArticleLikeModuleMobile"]');
+			if(likeModule){
+				likeModule.style.display="none"
+			}
+			var switchBtns = document.querySelector('div[class^="Index_switchBtns"]');
+			if(switchBtns){
+				switchBtns.style.display="none"
+			}
+			var writeComment = document.querySelector('div[class*="Index_writeComment"]');
+			if(writeComment){
+				writeComment.style.display="none"
+			}
 		`
 
-		hideCommentsExpression := 
-		`
+		hideCommentsExpression :=
+			`
 			var comments = document.querySelector('div[class^="Index_articleComments"]')
 			if(comments){
 				comments.style.display="none"
@@ -139,7 +159,12 @@ func hideRedundantElements(downloadComments bool) chromedp.ActionFunc {
 
 func printToPDF(res *[]byte) chromedp.ActionFunc {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
-		data, _, err := page.PrintToPDF().WithPrintBackground(false).Do(ctx)
+		data, _, err := page.PrintToPDF().
+			WithMarginTop(0.4).
+			WithMarginBottom(0.4).
+			WithMarginLeft(0.4).
+			WithMarginRight(0.4).
+			Do(ctx)
 		if err != nil {
 			return err
 		}
