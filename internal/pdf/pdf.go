@@ -21,22 +21,16 @@ import (
 // ErrGeekTimeRateLimit ...
 var ErrGeekTimeRateLimit = errors.New("已触发限流, 你可以选择重新登录/重新获取 cookie, 或者稍后再试, 然后生成剩余的文章")
 
-// AllocateBrowserInstance ...
-func AllocateBrowserInstance(ctx context.Context) (context.Context, context.CancelFunc, error) {
-	// create a new browser
-	chromedpCtx, chromedpCancelFunc := chromedp.NewContext(ctx)
-	// start the browser
-	return chromedpCtx, chromedpCancelFunc, chromedp.Run(chromedpCtx)
-}
-
 // PrintArticlePageToPDF use chromedp to print article page and save
 func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookies []*http.Cookie, downloadComments bool) error {
 	rateLimit := false
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
 	// new tab
-	ctx, cancel = chromedp.NewContext(ctx)
+	ctx, cancel := chromedp.NewContext(ctx)
 	defer cancel()
+
+	ctx, cancel = context.WithTimeout(ctx, time.Minute)
+	defer cancel()
+
 	chromedp.ListenTarget(ctx, func(ev interface{}) {
 		switch responseReceivedEvent := ev.(type) {
 		case *network.EventResponseReceived:

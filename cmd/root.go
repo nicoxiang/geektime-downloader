@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,10 +13,10 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/briandowns/spinner"
+	"github.com/chromedp/chromedp"
 	"github.com/manifoldco/promptui"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pdf"
@@ -23,7 +24,6 @@ import (
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/video"
 	"github.com/spf13/cobra"
-	"golang.org/x/sync/errgroup"
 )
 
 // File extension
@@ -42,19 +42,20 @@ var (
 	products            []geektime.Product
 	currentProductIndex int
 	quality             string
-	downloadComments	bool
+	downloadComments    bool
 )
 
 func init() {
+	rand.Seed(time.Now().UnixNano())
+
 	userHomeDir, _ := os.UserHomeDir()
-	defaultConcurency := int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
+	concurrency = int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
 	defaultDownloadFolder := filepath.Join(userHomeDir, file.GeektimeDownloaderFolder)
 
 	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)")
 	rootCmd.Flags().StringVar(&gcid, "gcid", "", "极客时间 cookie 值 gcid")
 	rootCmd.Flags().StringVar(&gcess, "gcess", "", "极客时间 cookie 值 gcess")
 	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "专栏和视频课的下载目标位置")
-	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "c", defaultConcurency, "下载并发数")
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
 
@@ -119,7 +120,7 @@ func selectProduct(ctx context.Context) {
 		Inactive: "{{if eq .Type `c1`}} {{ `专栏` }} {{else}} {{ `视频课` }} {{end}} {{ .Title }} {{ .AuthorName }}",
 	}
 	prompt := promptui.Select{
-		Label:        "请选择课程: ",
+		Label:        "我的课程列表, 请选择: ",
 		Items:        products,
 		Templates:    templates,
 		Size:         20,
@@ -232,28 +233,32 @@ func handleDownloadAll(ctx context.Context) {
 	if isColumn() {
 		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", cTitle)
 		total := len(articles)
-		p := downloadSuccessPrinter{i: 0}
+		var i int
 
-		// classic bounded work pooling pattern
-		g := new(errgroup.Group)
-		ch := make(chan geektime.Article, concurrency)
-		for i := 0; i < concurrency; i++ {
-			g.Go(func() error {
-				return runPDFGeneratorWorker(ctx, ch, folder, total, &p)
-			})
+		chromedpCtx, cancel := chromedp.NewContext(ctx)
+		// start the browser
+		err := chromedp.Run(chromedpCtx)
+		if err != nil {
+			exitWithError(err)
 		}
+		defer cancel()
 
 		for _, a := range articles {
 			fileName := getDownloadFileName(a)
 			if _, ok := downloaded[fileName]; ok {
-				p.print(total)
+				increasePDFCount(total, &i)
 				continue
 			}
-			ch <- a
+			fileFullPath := filepath.Join(folder, fileName)
+			if err := pdf.PrintArticlePageToPDF(chromedpCtx, a.AID, fileFullPath, geektime.SiteCookies, downloadComments); err != nil {
+				// ensure chrome killed before os exit
+				cancel()
+				checkGeekTimeError(err)
+			}
+			increasePDFCount(total, &i)
+			r := rand.Intn(2000)
+			time.Sleep(time.Duration(r) * time.Millisecond)
 		}
-		close(ch)
-		err = g.Wait()
-		checkGeekTimeError(err)
 	} else if isVideo() {
 		for _, a := range articles {
 			fileName := getDownloadFileName(a)
@@ -269,58 +274,9 @@ func handleDownloadAll(ctx context.Context) {
 	selectProduct(ctx)
 }
 
-type downloadSuccessPrinter struct {
-	mu sync.Mutex
-	i  int
-}
-
-func (p *downloadSuccessPrinter) print(total int) {
-	p.mu.Lock()
-	p.i++
-	fmt.Printf("\r已完成下载%d/%d", p.i, total)
-	p.mu.Unlock()
-}
-
-func runPDFGeneratorWorker(ctx context.Context, articles chan geektime.Article, folder string, total int, printer *downloadSuccessPrinter) error {
-	chromedpCtx, cancel, err := pdf.AllocateBrowserInstance(ctx)
-	if err != nil {
-		return err
-	}
-	defer cancel()
-
-	var es []error
-loop:
-	for {
-		select {
-		case <-chromedpCtx.Done():
-			// Drain articles to allow existing goroutines to finish.
-			for range articles {
-			}
-		case a, ok := <-articles:
-			if !ok {
-				break loop
-			}
-
-			fileFullPath := filepath.Join(folder, getDownloadFileName(a))
-			err = pdf.PrintArticlePageToPDF(chromedpCtx, 
-				a.AID, 
-				fileFullPath, 
-				geektime.SiteCookies,
-				downloadComments,
-			)
-			if err != nil {
-				cancel()
-				es = append(es, err)
-				continue
-			}
-			printer.print(total)
-		}
-	}
-	// Only the first error is ErrGeekTimeRateLimit, second one is canceled error
-	if len(es) > 0 {
-		return es[0]
-	}
-	return nil
+func increasePDFCount(total int, i *int) {
+	(*i)++
+	fmt.Printf("\r已完成下载%d/%d", *i, total)
 }
 
 func loadProducts() {
@@ -363,11 +319,13 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 	if isColumn() {
 		sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》... ]", article.Title)
 		sp.Start()
-		chromedpCtx, cancelFunc, err := pdf.AllocateBrowserInstance(ctx)
+		chromedpCtx, cancel := chromedp.NewContext(ctx)
+		// start the browser
+		err := chromedp.Run(chromedpCtx)
 		if err != nil {
-			panic(err)
+			exitWithError(err)
 		}
-		defer cancelFunc()
+		defer cancel()
 		err = pdf.PrintArticlePageToPDF(chromedpCtx,
 			article.AID,
 			fileFullPath,
@@ -377,7 +335,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		sp.Stop()
 		if err != nil {
 			// ensure chrome killed before os exit
-			cancelFunc()
+			cancel()
 			checkGeekTimeError(err)
 		}
 	} else if isVideo() {
