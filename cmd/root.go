@@ -42,6 +42,7 @@ var (
 	products            []geektime.Product
 	currentProductIndex int
 	quality             string
+	downloadComments	bool
 )
 
 func init() {
@@ -55,6 +56,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "专栏和视频课的下载目标位置")
 	rootCmd.Flags().IntVarP(&concurrency, "concurrency", "c", defaultConcurency, "下载并发数")
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
+	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
 
 	sp = spinner.New(spinner.CharSets[4], 100*time.Millisecond)
 }
@@ -258,7 +260,7 @@ func handleDownloadAll(ctx context.Context) {
 			if _, ok := downloaded[fileName]; ok {
 				continue
 			}
-			videoInfo, err := geektime.GetVideoInfo(a.AID, "ld")
+			videoInfo, err := geektime.GetVideoInfo(a.AID, quality)
 			checkGeekTimeError(err)
 			err = video.DownloadVideo(ctx, videoInfo.M3U8URL, fileName, folder, int64(videoInfo.Size), concurrency)
 			checkGeekTimeError(err)
@@ -300,7 +302,12 @@ loop:
 			}
 
 			fileFullPath := filepath.Join(folder, getDownloadFileName(a))
-			err = pdf.PrintArticlePageToPDF(chromedpCtx, a.AID, fileFullPath, geektime.SiteCookies)
+			err = pdf.PrintArticlePageToPDF(chromedpCtx, 
+				a.AID, 
+				fileFullPath, 
+				geektime.SiteCookies,
+				downloadComments,
+			)
 			if err != nil {
 				cancel()
 				es = append(es, err)
@@ -365,6 +372,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 			article.AID,
 			fileFullPath,
 			geektime.SiteCookies,
+			downloadComments,
 		)
 		sp.Stop()
 		if err != nil {
@@ -373,7 +381,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 			checkGeekTimeError(err)
 		}
 	} else if isVideo() {
-		videoInfo, err := geektime.GetVideoInfo(article.AID, "ld")
+		videoInfo, err := geektime.GetVideoInfo(article.AID, quality)
 		checkGeekTimeError(err)
 		err = video.DownloadVideo(ctx, videoInfo.M3U8URL, fileName, projectDir, int64(videoInfo.Size), concurrency)
 		checkGeekTimeError(err)
