@@ -97,6 +97,10 @@ func hideRedundantElements(downloadComments bool) chromedp.ActionFunc {
 			if(audioPlayer){
 				audioPlayer.style.display="none"
 			}
+			var audioFloatBar = document.querySelector('div[class*="audio-float-bar"]');
+			if(audioFloatBar){
+				audioFloatBar.style.display="none"
+			}
 			var leadsWrapper = document.querySelector('div[class^="leads-wrapper"]');
 			if(leadsWrapper){
 				leadsWrapper.style.display="none";
