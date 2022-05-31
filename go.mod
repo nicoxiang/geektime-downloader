@@ -13,7 +13,10 @@ require (
 )
 
 require (
+	github.com/JohannesKaufmann/html-to-markdown v1.3.4 // indirect
+	github.com/PuerkitoBio/goquery v1.5.1 // indirect
 	github.com/VividCortex/ewma v1.1.1 // indirect
+	github.com/andybalholm/cascadia v1.1.0 // indirect
 	github.com/chromedp/sysutil v1.0.0 // indirect
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e // indirect
 	github.com/fatih/color v1.13.0 // indirect

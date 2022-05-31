@@ -36,8 +36,8 @@ func Login(phone, password string) ([]*http.Cookie, error) {
 	loginResponse, err := resty.New().
 		SetBaseURL(pgt.GeekBangAccount).
 		SetTimeout(10*time.Second).
-		SetHeader(UserAgentHeaderName, UserAgent).
-		SetHeader(OriginHeaderName, pgt.GeekBang).
+		SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
+		SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
 		SetHeader("Referer", pgt.GeekBangAccount+"/signin?redirect=https%3A%2F%2Ftime.geekbang.org%2F").
 		R().
 		SetBody(

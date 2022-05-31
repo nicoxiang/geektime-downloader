@@ -3,9 +3,9 @@ package pdf
 import (
 	"context"
 	"errors"
-	"io/ioutil"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -15,14 +15,18 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/device"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
+
+// PDFExtension ...
+const PDFExtension = ".pdf"
 
 // ErrGeekTimeRateLimit ...
 var ErrGeekTimeRateLimit = errors.New("已触发限流, 你可以选择重新登录/重新获取 cookie, 或者稍后再试, 然后生成剩余的文章")
 
 // PrintArticlePageToPDF use chromedp to print article page and save
-func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookies []*http.Cookie, downloadComments bool) error {
+func PrintArticlePageToPDF(ctx context.Context, aid int, dir, title string, cookies []*http.Cookie, downloadComments bool) error {
 	rateLimit := false
 	// new tab
 	ctx, cancel := chromedp.NewContext(ctx)
@@ -65,7 +69,8 @@ func PrintArticlePageToPDF(ctx context.Context, aid int, filename string, cookie
 		return err
 	}
 
-	if err := ioutil.WriteFile(filename, buf, os.ModePerm); err != nil {
+	fileName := filepath.Join(dir, filenamify.Filenamify(title)+PDFExtension)
+	if err := os.WriteFile(fileName, buf, 0666); err != nil {
 		return err
 	}
 	return nil

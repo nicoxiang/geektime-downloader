@@ -4,25 +4,21 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/go-resty/resty/v2"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 const (
-	// UserAgentHeaderName ...
-	UserAgentHeaderName = "User-Agent"
-	// OriginHeaderName ...
-	OriginHeaderName = "Origin"
-	// UserAgent is Web browser User Agent
-	UserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.92 Safari/537.36"
 	// ProductPath ...
 	ProductPath = "/serv/v3/learn/product"
 	// ArticlesPath ...
 	ArticlesPath = "/serv/v1/column/articles"
-	// ArticleInfoPath ...
-	ArticleInfoPath = "/serv/v3/article/info"
+	// ArticleV1Path ...
+	ArticleV1Path = "/serv/v1/article"
 )
 
 var (
@@ -43,7 +39,7 @@ type ErrGeekTimeAPIBadCode struct {
 
 // Error implements error interface
 func (e ErrGeekTimeAPIBadCode) Error() string {
-	return fmt.Sprintf("make geektime api call %s failed, code %d, msg %s", e.Path, e.Code, e.Msg)
+	return fmt.Sprintf("请求极客时间接口 %s 失败, code %d, msg %s", e.Path, e.Code, e.Msg)
 }
 
 // Product ...
@@ -55,7 +51,7 @@ type Product struct {
 	Articles   []Article
 }
 
-// ArticleSummary ...
+// Article ...
 type Article struct {
 	AID   int
 	Title string
@@ -67,21 +63,61 @@ type VideoInfo struct {
 	Size    int
 }
 
+// ColumnResponse ...
+type ColumnResponse struct {
+	Code int `json:"code"`
+	Data struct {
+		ArticleTitle   string `json:"article_title"`
+		ArticleContent string `json:"article_content"`
+	} `json:"data"`
+}
+
+// VideoResponse ...
+type VideoResponse struct {
+	Code int `json:"code"`
+	Data struct {
+		ArticleTitle string `json:"article_title"`
+		HLSVideos    struct {
+			SD struct {
+				Size int    `json:"size"`
+				URL  string `json:"url"`
+			} `json:"sd"`
+			HD struct {
+				Size int    `json:"size"`
+				URL  string `json:"url"`
+			} `json:"hd"`
+			LD struct {
+				Size int    `json:"size"`
+				URL  string `json:"url"`
+			} `json:"ld"`
+		} `json:"hls_videos"`
+	} `json:"data"`
+}
+
+// ArticleResponse type constraint, column and video response are different,
+// hls_videos field in video response is struct, but in column response its slice
+type ArticleResponse interface {
+	ColumnResponse | VideoResponse
+}
+
+// InitClient init golbal clients with cookies
 func InitClient(cookies []*http.Cookie) {
 	geekTimeClient = resty.New().
 		SetBaseURL(pgt.GeekBang).
 		SetCookies(cookies).
 		SetRetryCount(1).
 		SetTimeout(10*time.Second).
-		SetHeader(UserAgentHeaderName, UserAgent).
-		SetHeader(OriginHeaderName, pgt.GeekBang)
+		SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
+		SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
+		SetLogger(logger.DiscardLogger{})
 
 	accountClient = resty.New().
 		SetBaseURL(pgt.GeekBangAccount).
 		SetCookies(cookies).
 		SetTimeout(10*time.Second).
-		SetHeader(UserAgentHeaderName, UserAgent).
-		SetHeader(OriginHeaderName, pgt.GeekBang)
+		SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
+		SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
+		SetLogger(logger.DiscardLogger{})
 
 	SiteCookies = cookies
 }
@@ -152,57 +188,75 @@ func GetArticles(cid string) ([]Article, error) {
 	return nil, ErrGeekTimeAPIBadCode{ArticlesPath, result.Code, ""}
 }
 
-// GetVideoInfo call geektime api to get video info
-func GetVideoInfo(articleID int, quality string) (VideoInfo, error) {
-	var videoInfo VideoInfo
-	ok, err := auth()
+// GetColumnContent ...
+func GetColumnContent(articleID int) (string, error) {
+	a, err := GetArticleInfo[ColumnResponse](articleID)
 	if err != nil {
-		return videoInfo, err
+		return "", err
 	}
-	if !ok {
-		return videoInfo, ErrAuthFailed
+	if a.Code != 0 {
+		return "", ErrGeekTimeAPIBadCode{ArticleV1Path, a.Code, ""}
 	}
 
-	var result struct {
-		Code int `json:"code"`
-		Data struct {
-			Info struct {
-				ID    int    `json:"id"`
-				Title string `json:"title"`
-				Video struct {
-					HLSVideos []struct {
-						Size    int    `json:"size"`
-						Quality string `json:"quality"`
-						URL     string `json:"url"`
-					} `json:"hls_medias"`
-				} `json:"video"`
-			} `json:"info"`
-		} `json:"data"`
+	return a.Data.ArticleContent, err
+}
+
+// GetVideoInfo ...
+func GetVideoInfo(articleID int, quality string) (VideoInfo, error) {
+	var v VideoInfo
+	a, err := GetArticleInfo[VideoResponse](articleID)
+	if err != nil {
+		return v, err
 	}
+	if a.Code != 0 {
+		return v, ErrGeekTimeAPIBadCode{ArticleV1Path, a.Code, ""}
+	}
+	if quality == "sd" {
+		v = VideoInfo{
+			M3U8URL: a.Data.HLSVideos.SD.URL,
+			Size:    a.Data.HLSVideos.SD.Size,
+		}
+	} else if quality == "hd" {
+		v = VideoInfo{
+			M3U8URL: a.Data.HLSVideos.HD.URL,
+			Size:    a.Data.HLSVideos.HD.Size,
+		}
+	} else if quality == "ld" {
+		v = VideoInfo{
+			M3U8URL: a.Data.HLSVideos.LD.URL,
+			Size:    a.Data.HLSVideos.LD.Size,
+		}
+	}
+	return v, nil
+}
+
+// GetArticleInfo ...
+func GetArticleInfo[R ArticleResponse](articleID int) (R, error) {
+	var response R
+	ok, err := auth()
+	if err != nil {
+		return response, err
+	}
+	if !ok {
+		return response, ErrAuthFailed
+	}
+
 	_, err = geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
-				"id": articleID,
+				"id":                strconv.Itoa(articleID),
+				"include_neighbors": true,
+				"is_freelyread":     true,
+				"reverse":           false,
 			}).
-		SetResult(&result).
-		Post(ArticleInfoPath)
+		SetResult(&response).
+		Post(ArticleV1Path)
 
 	if err != nil {
-		return videoInfo, err
+		return response, err
 	}
 
-	if result.Code == 0 {
-		for _, v := range result.Data.Info.Video.HLSVideos {
-			if v.Quality == quality {
-				return VideoInfo{
-					v.URL,
-					v.Size,
-				}, nil
-			}
-		}
-	}
-
-	return videoInfo, ErrGeekTimeAPIBadCode{ArticleInfoPath, result.Code, ""}
+	return response, nil
 }
 
 // auth check if current user login is expired or login in another device
