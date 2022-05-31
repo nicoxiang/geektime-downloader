@@ -10,22 +10,23 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
 	"github.com/go-resty/resty/v2"
-	pf "github.com/nicoxiang/geektime-downloader/internal/pkg/file"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 	"golang.org/x/sync/errgroup"
 )
 
 const (
 	syncByte = uint8(71) //0x47
-	userAgentHeaderName = "User-Agent"
-	originHeaderName = "Origin"
-	userAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/81.0.4044.92 Safari/537.36"
+	// TSExtension ...
+	TSExtension = ".ts"
 )
 
 var clientOnce struct {
@@ -40,22 +41,47 @@ var (
 	ErrUnexpectedDecryptKeyResponse = errors.New("unexpected decrypt key response")
 )
 
+// ByNumericalFilename implement sort interface, order by file name suffix number
+type ByNumericalFilename []os.FileInfo
+
+func (nf ByNumericalFilename) Len() int      { return len(nf) }
+func (nf ByNumericalFilename) Swap(i, j int) { nf[i], nf[j] = nf[j], nf[i] }
+func (nf ByNumericalFilename) Less(i, j int) bool {
+	// Use path names
+	pathA := nf[i].Name()
+	pathB := nf[j].Name()
+
+	// Grab integer value of each filename by parsing the string and slicing off
+	// the extension
+	a, err1 := strconv.ParseInt(pathA[0:strings.LastIndex(pathA, ".")], 10, 64)
+	b, err2 := strconv.ParseInt(pathB[0:strings.LastIndex(pathB, ".")], 10, 64)
+
+	// If any were not numbers sort lexographically
+	if err1 != nil || err2 != nil {
+		return pathA < pathB
+	}
+
+	// Which integer is smaller?
+	return a < b
+}
+
 func getClient() *resty.Client {
 	clientOnce.Do(func() {
 		clientOnce.c = resty.New().
 			SetRetryCount(1).
 			SetTimeout(10*time.Second).
-			SetHeader(userAgentHeaderName, userAgent).
-			SetHeader(originHeaderName, pgt.GeekBang)
+			SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
+			SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
+			SetLogger(logger.DiscardLogger{})
 	})
 	return clientOnce.c
 }
 
 // DownloadVideo ...
-func DownloadVideo(ctx context.Context, m3u8url, fileName, downloadProjectFolder string, size int64, concurrency int) (err error) {
+func DownloadVideo(ctx context.Context, m3u8url, title, projectDir string, size int64, concurrency int) (err error) {
 	i := strings.LastIndex(m3u8url, "/")
 	tsURLPrefix := m3u8url[:i+1]
-	filenamifyTitle := strings.TrimSuffix(fileName, filepath.Ext(fileName))
+	filenamifyTitle := filenamify.Filenamify(title)
 
 	// Stage1: Make m3u8 URL call and resolve
 	decryptkmsURL, tsFileNames, err := readM3U8File(ctx, m3u8url)
@@ -76,7 +102,7 @@ func DownloadVideo(ctx context.Context, m3u8url, fileName, downloadProjectFolder
 	}
 
 	// Stage3: Make temp ts folder and download temp ts files
-	tempVideoDir := filepath.Join(downloadProjectFolder, filenamifyTitle)
+	tempVideoDir := filepath.Join(projectDir, filenamifyTitle)
 	if err = os.MkdirAll(tempVideoDir, os.ModePerm); err != nil {
 		return
 	}
@@ -109,7 +135,7 @@ func DownloadVideo(ctx context.Context, m3u8url, fileName, downloadProjectFolder
 	}
 
 	// Stage4: Read temp ts files, decrypt and merge into the one final video file
-	err = mergeTSFiles(tempVideoDir, fileName, downloadProjectFolder, key)
+	err = mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir, key)
 
 	return
 }
@@ -130,8 +156,8 @@ loop:
 			c := resty.New()
 			c.SetOutputDirectory(tempVideoDir).
 				SetTimeout(time.Minute).
-				SetHeader(userAgentHeaderName, userAgent).
-				SetHeader(originHeaderName, pgt.GeekBang)
+				SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
+				SetHeader(pgt.OriginHeaderName, pgt.GeekBang)
 
 			resp, err := c.R().
 				SetContext(ctx).
@@ -169,13 +195,13 @@ func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFile
 	return
 }
 
-func mergeTSFiles(tempVideoDir, fileName, downloadProjectFolder string, key []byte) error {
+func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte) error {
 	tempTSFiles, err := ioutil.ReadDir(tempVideoDir)
 	if err != nil {
 		return err
 	}
-	sort.Sort(pf.ByNumericalFilename(tempTSFiles))
-	fullPath := filepath.Join(downloadProjectFolder, fileName)
+	sort.Sort(ByNumericalFilename(tempTSFiles))
+	fullPath := filepath.Join(projectDir, filenamifyTitle+TSExtension)
 	finalVideoFile, err := os.OpenFile(fullPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, os.ModePerm)
 	if err != nil {
 		return err

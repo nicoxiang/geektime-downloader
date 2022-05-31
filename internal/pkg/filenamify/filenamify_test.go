@@ -1,4 +1,4 @@
-package file
+package filenamify
 
 import (
 	"testing"

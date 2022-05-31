@@ -1,6 +1,6 @@
 # geektime-downloader
 
-geektime-downloader 支持下载专栏为 PDF 文档和下载视频课。
+geektime-downloader 支持下载专栏为 PDF/Markdown 文档和下载视频课。
 
 [![go report card](https://goreportcard.com/badge/github.com/nicoxiang/geektime-downloader "go report card")](https://goreportcard.com/report/github.com/nicoxiang/geektime-downloader)
 [![MIT license](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
@@ -49,13 +49,14 @@ Usage:
   geektime-downloader [flags]
 
 Flags:
-      --comments          是否需要专栏的第一页评论 (default true)
-  -f, --folder string     专栏和视频课的下载目标位置 (default "")
-      --gcess string      极客时间 cookie 值 gcess
-      --gcid string       极客时间 cookie 值 gcid
-  -h, --help              help for geektime-downloader
-  -u, --phone string      你的极客时间账号(手机号)
-  -q, --quality string    下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
+      --columnOutputType int8   下载专栏的输出格式(1pdf,2markdown,3all) (default 1)
+      --comments                是否需要专栏的第一页评论 (default true)
+  -f, --folder string           专栏和视频课的下载目标位置 (default "")
+      --gcess string            极客时间 cookie 值 gcess
+      --gcid string             极客时间 cookie 值 gcid
+  -h, --help                    help for geektime-downloader
+  -u, --phone string            你的极客时间账号(手机号)
+  -q, --quality string          下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")  
 ```
 
 ## Note
@@ -64,9 +65,11 @@ Flags:
 
 2. Ctrl + C 退出程序
 
-3. 如果选择下载所有后中断程序，可重新进入程序继续下载
+3. 默认情况下载专栏的输出格式只有 PDF，可以按需选择是否需要下载 Markdown 格式（--columnOutputType 参数），Markdown 格式虽然显示效果上不及 PDF，但优势为可以显示完整的代码块（PDF 代码块在水平方向太长时会有缺失）并保留了原文中的超链接。
 
-4. 通过密码登录的情况下，为了避免多次登录账户，会在目录 [UserConfigDir](https://pkg.go.dev/os#UserConfigDir)/geektime-downloader 下存放用户的登录 cookie，如果不是在自己的电脑上执行，请在使用完毕程序后手动删除
+4. 如果选择下载所有后中断程序，可重新进入程序继续下载
+
+5. 通过密码登录的情况下，为了避免多次登录账户，会在目录 [UserConfigDir](https://pkg.go.dev/os#UserConfigDir)/geektime-downloader 下存放用户的登录 cookie，如果不是在自己的电脑上执行，请在使用完毕程序后手动删除
 
 ## Inspired by 
 
