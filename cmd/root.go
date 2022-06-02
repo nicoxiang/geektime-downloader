@@ -18,6 +18,7 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/chromedp/chromedp"
+	"github.com/chzyer/readline"
 	"github.com/manifoldco/promptui"
 	"github.com/nicoxiang/geektime-downloader/internal/config"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
@@ -112,6 +113,22 @@ var rootCmd = &cobra.Command{
 	},
 }
 
+type noBellStdout struct{}
+
+func (n *noBellStdout) Write(p []byte) (int, error) {
+	if len(p) == 1 && p[0] == readline.CharBell {
+		return 0, nil
+	}
+	return readline.Stdout.Write(p)
+}
+
+func (n *noBellStdout) Close() error {
+	return readline.Stdout.Close()
+}
+
+// NoBellStdout fix annoying sound when select
+var NoBellStdout = &noBellStdout{}
+
 func selectProduct(ctx context.Context) {
 	loadProducts()
 	templates := &promptui.SelectTemplates{
@@ -125,6 +142,7 @@ func selectProduct(ctx context.Context) {
 		Templates:    templates,
 		Size:         20,
 		HideSelected: true,
+		Stdout: NoBellStdout,
 	}
 	index, _, err := prompt.Run()
 	checkPromptError(err)
@@ -158,6 +176,7 @@ func handleSelectProduct(ctx context.Context) {
 		Templates:    templates,
 		Size:         len(options),
 		HideSelected: true,
+		Stdout: NoBellStdout,
 	}
 	index, _, err := prompt.Run()
 	checkPromptError(err)
@@ -196,6 +215,7 @@ func selectArticle(ctx context.Context) {
 		Size:         20,
 		HideSelected: true,
 		CursorPos:    0,
+		Stdout: NoBellStdout,
 	}
 	index, _, err := prompt.Run()
 	checkPromptError(err)
