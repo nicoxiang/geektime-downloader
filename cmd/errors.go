@@ -30,7 +30,6 @@ func checkError(err error) {
 			exitWithMsg(err.Error())
 		} else if errors.Is(err, pdf.ErrGeekTimeRateLimit) ||
 			errors.Is(err, geektime.ErrAuthFailed) {
-			exitWithMsg(err.Error())
 			exitAndRemoveConfig(err)
 		} else if os.IsTimeout(err) {
 			exitWithMsg("请求超时")
@@ -42,8 +41,9 @@ func checkError(err error) {
 }
 
 func exitAndRemoveConfig(err error) {
+	fmt.Fprintln(os.Stderr, err.Error())
 	if err := config.RemoveConfig(phone); err != nil {
-		exitWithMsg(err.Error())
+		fmt.Fprintln(os.Stderr, err.Error())
 	}
 	os.Exit(1)
 }
