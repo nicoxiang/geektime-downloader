@@ -18,7 +18,6 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/chromedp/chromedp"
-	"github.com/chzyer/readline"
 	"github.com/manifoldco/promptui"
 	"github.com/nicoxiang/geektime-downloader/internal/config"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
@@ -73,9 +72,7 @@ var rootCmd = &cobra.Command{
 		var readCookies []*http.Cookie
 		if phone != "" {
 			rc, err := config.ReadCookieFromConfigFile(phone)
-			if err != nil {
-				exitWithError(err)
-			}
+			checkError(err)
 			readCookies = rc
 		} else if gcid != "" && gcess != "" {
 			readCookies = readCookiesFromInput()
@@ -94,17 +91,16 @@ var rootCmd = &cobra.Command{
 				Mask: '*',
 			}
 			pwd, err := prompt.Run()
-			checkPromptError(err)
+			checkError(err)
 			sp.Prefix = "[ 正在登录... ]"
 			sp.Start()
 			readCookies, err = geektime.Login(phone, pwd)
 			if err != nil {
 				sp.Stop()
-				checkGeekTimeError(err)
+				checkError(err)
 			}
-			if err := config.WriteCookieToConfigFile(phone, readCookies); err != nil {
-				exitWithError(err)
-			}
+			err = config.WriteCookieToConfigFile(phone, readCookies)
+			checkError(err)
 			sp.Stop()
 			fmt.Println("登录成功")
 		}
@@ -112,22 +108,6 @@ var rootCmd = &cobra.Command{
 		selectProduct(cmd.Context())
 	},
 }
-
-type noBellStdout struct{}
-
-func (n *noBellStdout) Write(p []byte) (int, error) {
-	if len(p) == 1 && p[0] == readline.CharBell {
-		return 0, nil
-	}
-	return readline.Stdout.Write(p)
-}
-
-func (n *noBellStdout) Close() error {
-	return readline.Stdout.Close()
-}
-
-// NoBellStdout fix annoying sound when select
-var NoBellStdout = &noBellStdout{}
 
 func selectProduct(ctx context.Context) {
 	loadProducts()
@@ -142,10 +122,10 @@ func selectProduct(ctx context.Context) {
 		Templates:    templates,
 		Size:         20,
 		HideSelected: true,
-		Stdout: NoBellStdout,
+		Stdout:       NoBellStdout,
 	}
 	index, _, err := prompt.Run()
-	checkPromptError(err)
+	checkError(err)
 	currentProductIndex = index
 	handleSelectProduct(ctx)
 }
@@ -176,10 +156,10 @@ func handleSelectProduct(ctx context.Context) {
 		Templates:    templates,
 		Size:         len(options),
 		HideSelected: true,
-		Stdout: NoBellStdout,
+		Stdout:       NoBellStdout,
 	}
 	index, _, err := prompt.Run()
-	checkPromptError(err)
+	checkError(err)
 	handleSelectProductOps(ctx, index)
 }
 
@@ -215,10 +195,10 @@ func selectArticle(ctx context.Context) {
 		Size:         20,
 		HideSelected: true,
 		CursorPos:    0,
-		Stdout: NoBellStdout,
+		Stdout:       NoBellStdout,
 	}
 	index, _, err := prompt.Run()
-	checkPromptError(err)
+	checkError(err)
 	handleSelectArticle(ctx, articles, index)
 }
 
@@ -229,9 +209,7 @@ func handleSelectArticle(ctx context.Context, articles []geektime.Article, index
 	a := articles[index-1]
 
 	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, products[currentProductIndex].Title)
-	if err != nil {
-		exitWithError(err)
-	}
+	checkError(err)
 	downloadArticle(ctx, a, projectDir)
 	fmt.Printf("\r%s 下载完成", a.Title)
 	time.Sleep(time.Second)
@@ -243,13 +221,9 @@ func handleDownloadAll(ctx context.Context) {
 	articles := loadArticles()
 
 	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, cTitle)
-	if err != nil {
-		exitWithError(err)
-	}
+	checkError(err)
 	downloaded, err := findDownloadedArticleFileNames(projectDir)
-	if err != nil {
-		exitWithError(err)
-	}
+	checkError(err)
 	if isColumn() {
 		rand.Seed(time.Now().UnixNano())
 		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", cTitle)
@@ -263,9 +237,7 @@ func handleDownloadAll(ctx context.Context) {
 			chromedpCtx, cancel = chromedp.NewContext(ctx)
 			// start the browser
 			err := chromedp.Run(chromedpCtx)
-			if err != nil {
-				exitWithError(err)
-			}
+			checkError(err)
 			defer cancel()
 		}
 
@@ -296,14 +268,14 @@ func handleDownloadAll(ctx context.Context) {
 				); err != nil {
 					// ensure chrome killed before os exit
 					cancel()
-					checkGeekTimeError(err)
+					checkError(err)
 				}
 			}
 			if ((columnOutputType>>1)&1 == 1) && !mdExists {
 				html, err := geektime.GetColumnContent(a.AID)
-				checkGeekTimeError(err)
+				checkError(err)
 				err = markdown.Download(ctx, html, a.Title, projectDir, a.AID, concurrency)
-				checkGeekTimeError(err)
+				checkError(err)
 			}
 
 			increasePDFCount(total, &i)
@@ -317,9 +289,9 @@ func handleDownloadAll(ctx context.Context) {
 				continue
 			}
 			videoInfo, err := geektime.GetVideoInfo(a.AID, quality)
-			checkGeekTimeError(err)
+			checkError(err)
 			err = video.DownloadVideo(ctx, videoInfo.M3U8URL, a.Title, projectDir, int64(videoInfo.Size), concurrency)
-			checkGeekTimeError(err)
+			checkError(err)
 		}
 	}
 	selectProduct(ctx)
@@ -339,7 +311,7 @@ func loadProducts() {
 	p, err := geektime.GetProductList()
 	if err != nil {
 		sp.Stop()
-		checkGeekTimeError(err)
+		checkError(err)
 	}
 	if len(p) <= 0 {
 		sp.Stop()
@@ -356,7 +328,7 @@ func loadArticles() []geektime.Article {
 		sp.Prefix = "[ 正在加载文章列表... ]"
 		sp.Start()
 		articles, err := geektime.GetArticles(strconv.Itoa(p.ID))
-		checkGeekTimeError(err)
+		checkError(err)
 		products[currentProductIndex].Articles = articles
 		sp.Stop()
 	}
@@ -372,9 +344,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 			chromedpCtx, cancel := chromedp.NewContext(ctx)
 			// start the browser
 			err := chromedp.Run(chromedpCtx)
-			if err != nil {
-				exitWithError(err)
-			}
+			checkError(err)
 			defer cancel()
 			err = pdf.PrintArticlePageToPDF(chromedpCtx,
 				article.AID,
@@ -387,22 +357,22 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 				sp.Stop()
 				// ensure chrome killed before os exit
 				cancel()
-				checkGeekTimeError(err)
+				checkError(err)
 			}
 		}
 
 		if (columnOutputType>>1)&1 == 1 {
 			html, err := geektime.GetColumnContent(article.AID)
-			checkGeekTimeError(err)
+			checkError(err)
 			err = markdown.Download(ctx, html, article.Title, projectDir, article.AID, concurrency)
-			checkGeekTimeError(err)
+			checkError(err)
 		}
 		sp.Stop()
 	} else if isVideo() {
 		videoInfo, err := geektime.GetVideoInfo(article.AID, quality)
-		checkGeekTimeError(err)
+		checkError(err)
 		err = video.DownloadVideo(ctx, videoInfo.M3U8URL, article.Title, projectDir, int64(videoInfo.Size), concurrency)
-		checkGeekTimeError(err)
+		checkError(err)
 	}
 }
 
@@ -462,61 +432,6 @@ func mkDownloadProjectDir(downloadFolder, phone, gcid, projectName string) (stri
 	return path, nil
 }
 
-func checkGeekTimeError(err error) {
-	if err != nil {
-		if errors.Is(err, context.Canceled) {
-			os.Exit(1)
-		} else if errors.Is(err, geektime.ErrWrongPassword) ||
-			errors.Is(err, geektime.ErrTooManyLoginAttemptTimes) {
-			exitWithMsg(err.Error())
-		} else if errors.Is(err, pdf.ErrGeekTimeRateLimit) ||
-			errors.Is(err, geektime.ErrAuthFailed) {
-
-			// New line after print pdf success msg
-			if errors.Is(err, pdf.ErrGeekTimeRateLimit) {
-				fmt.Println()
-			}
-
-			fmt.Fprintln(os.Stderr, err.Error())
-			if err := config.RemoveConfig(phone); err != nil {
-				fmt.Fprintln(os.Stderr, err.Error())
-			}
-			os.Exit(1)
-		} else if os.IsTimeout(err) {
-			exitWhenClientTimeout()
-		} else if _, ok := err.(*geektime.ErrGeekTimeAPIBadCode); ok {
-			exitWithMsg(err.Error())
-		} else {
-			// others
-			exitWithError(err)
-		}
-	}
-}
-
-func checkPromptError(err error) {
-	if err != nil {
-		if !errors.Is(err, promptui.ErrInterrupt) {
-			fmt.Fprint(os.Stderr, err)
-		}
-		os.Exit(1)
-	}
-}
-
-func exitWhenClientTimeout() {
-	exitWithMsg("\n请求超时")
-}
-
-// Unexpected error
-func exitWithError(err error) {
-	fmt.Fprintf(os.Stderr, "An error occurred: %v\n", err.Error())
-	os.Exit(1)
-}
-
-func exitWithMsg(msg string, args ...interface{}) {
-	fmt.Fprintf(os.Stderr, msg+"\n", args...)
-	os.Exit(1)
-}
-
 // Execute ...
 func Execute() {
 	ctx := context.Background()
@@ -537,6 +452,6 @@ func Execute() {
 	}()
 
 	if err := rootCmd.ExecuteContext(ctx); err != nil {
-		exitWithError(err)
+		checkError(err)
 	}
 }

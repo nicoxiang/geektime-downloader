@@ -34,13 +34,6 @@ var clientOnce struct {
 	c *resty.Client
 }
 
-var (
-	// ErrUnexpectedM3U8Format ...
-	ErrUnexpectedM3U8Format = errors.New("unexpected m3u8 response format")
-	// ErrUnexpectedDecryptKeyResponse ...
-	ErrUnexpectedDecryptKeyResponse = errors.New("unexpected decrypt key response")
-)
-
 // ByNumericalFilename implement sort interface, order by file name suffix number
 type ByNumericalFilename []os.FileInfo
 
@@ -89,7 +82,7 @@ func DownloadVideo(ctx context.Context, m3u8url, title, projectDir string, size 
 		return
 	}
 	if decryptkmsURL == "" || len(tsFileNames) == 0 {
-		return ErrUnexpectedM3U8Format
+		return errors.New("unexpected m3u8 response format")
 	}
 
 	// Stage2: Get decrypt key
@@ -98,7 +91,7 @@ func DownloadVideo(ctx context.Context, m3u8url, title, projectDir string, size 
 		return
 	}
 	if key == nil {
-		return ErrUnexpectedDecryptKeyResponse
+		return errors.New("unexpected decrypt key response")
 	}
 
 	// Stage3: Make temp ts folder and download temp ts files
