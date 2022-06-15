@@ -134,6 +134,10 @@ func hideRedundantElements(downloadComments bool) chromedp.ActionFunc {
 			if(writeComment){
 				writeComment.style.display="none"
 			}
+			var moreBtns = document.querySelectorAll('div[class^=CommentItem_more]');
+			for (let btn of moreBtns) {
+				btn.click();
+			}
 		`
 
 		hideCommentsExpression :=

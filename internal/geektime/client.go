@@ -19,6 +19,8 @@ const (
 	ArticlesPath = "/serv/v1/column/articles"
 	// ArticleV1Path ...
 	ArticleV1Path = "/serv/v1/article"
+	// ColumnInfoV3Path ...
+	ColumnInfoV3Path = "/serv/v3/column/info"
 )
 
 var (
@@ -44,11 +46,11 @@ func (e ErrGeekTimeAPIBadCode) Error() string {
 
 // Product ...
 type Product struct {
-	ID         int
-	Title      string
-	AuthorName string
-	Type       string
-	Articles   []Article
+	Access   bool
+	ID       int
+	Title    string
+	Type     string
+	Articles []Article
 }
 
 // Article ...
@@ -122,17 +124,58 @@ func InitClient(cookies []*http.Cookie) {
 	SiteCookies = cookies
 }
 
+// GetColumnInfo  ..
+func GetColumnInfo(productID int) (Product, error) {
+	var p Product
+	if err := Auth(); err != nil {
+		return p, err
+	}
+	var result struct {
+		Code int `json:"code"`
+		Data struct {
+			ID    int    `json:"id"`
+			Type  string `json:"type"`
+			Title string `json:"title"`
+			Extra struct {
+				Sub struct {
+					AccessMask int `json:"access_mask"`
+				} `json:"sub"`
+			} `json:"extra"`
+		} `json:"data"`
+	}
+	_, err := geekTimeClient.R().
+		SetBody(
+			map[string]interface{}{
+				"product_id":             productID,
+				"with_recommend_article": true,
+			}).
+		SetResult(&result).
+		Post(ColumnInfoV3Path)
+
+	if err != nil {
+		return p, err
+	}
+
+	if result.Code == 0 {
+		p = Product{
+			Access: result.Data.Extra.Sub.AccessMask > 0,
+			ID:    result.Data.ID,
+			Type:  result.Data.Type,
+			Title: result.Data.Title,
+		}
+		return p, nil
+	}
+
+	return p, ErrGeekTimeAPIBadCode{ColumnInfoV3Path, result.Code, ""}
+}
+
 // GetProductList call geektime api to get product list
 func GetProductList() ([]Product, error) {
-	ok, err := auth()
-	if err != nil {
+	if err := Auth(); err != nil {
 		return nil, err
 	}
-	if !ok {
-		return nil, ErrAuthFailed
-	}
 	var products []Product
-	products, err = appendProducts(0, products)
+	products, err := appendProducts(0, products)
 	if err != nil {
 		return nil, err
 	}
@@ -141,12 +184,8 @@ func GetProductList() ([]Product, error) {
 
 // GetArticles call geektime api to get article list
 func GetArticles(cid string) ([]Article, error) {
-	ok, err := auth()
-	if err != nil {
+	if err := Auth(); err != nil {
 		return nil, err
-	}
-	if !ok {
-		return nil, ErrAuthFailed
 	}
 
 	var result struct {
@@ -158,7 +197,7 @@ func GetArticles(cid string) ([]Article, error) {
 			} `json:"list"`
 		} `json:"data"`
 	}
-	_, err = geekTimeClient.R().
+	_, err := geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
 				"cid":    cid,
@@ -233,15 +272,11 @@ func GetVideoInfo(articleID int, quality string) (VideoInfo, error) {
 // GetArticleInfo ...
 func GetArticleInfo[R ArticleResponse](articleID int) (R, error) {
 	var response R
-	ok, err := auth()
-	if err != nil {
+	if err := Auth(); err != nil {
 		return response, err
 	}
-	if !ok {
-		return response, ErrAuthFailed
-	}
 
-	_, err = geekTimeClient.R().
+	_, err := geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
 				"id":                strconv.Itoa(articleID),
@@ -259,8 +294,8 @@ func GetArticleInfo[R ArticleResponse](articleID int) (R, error) {
 	return response, nil
 }
 
-// auth check if current user login is expired or login in another device
-func auth() (bool, error) {
+// Auth check if current user login is expired or login in another device
+func Auth() error {
 	var result struct {
 		Code int `json:"code"`
 	}
@@ -271,19 +306,19 @@ func auth() (bool, error) {
 		Get("/serv/v1/user/auth")
 
 	if err != nil {
-		return false, err
+		return err
 	}
 
 	if resp.StatusCode() == 200 {
 		if result.Code == 0 {
-			return true, nil
+			return nil
 		}
 		// result Code -1
 		// {\"error\":{\"msg\":\"未登录\",\"code\":-2000}
-		return false, nil
+		return ErrAuthFailed
 	}
 	// status code 452
-	return false, nil
+	return ErrAuthFailed
 }
 
 func appendProducts(prev int, products []Product) ([]Product, error) {
@@ -335,10 +370,9 @@ func appendProducts(prev int, products []Product) ([]Product, error) {
 			// For now we can only download column and video
 			if v.Type == "c1" || v.Type == "c3" {
 				products = append(products, Product{
-					ID:         v.ID,
-					Title:      v.Title,
-					AuthorName: v.Author.Name,
-					Type:       v.Type,
+					ID:    v.ID,
+					Title: v.Title,
+					Type:  v.Type,
 				})
 			}
 		}
