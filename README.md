@@ -49,27 +49,35 @@ Usage:
   geektime-downloader [flags]
 
 Flags:
-      --columnOutputType int8   下载专栏的输出格式(1pdf,2markdown,3all) (default 1)
-      --comments                是否需要专栏的第一页评论 (default true)
-  -f, --folder string           专栏和视频课的下载目标位置 (default "")
-      --gcess string            极客时间 cookie 值 gcess
-      --gcid string             极客时间 cookie 值 gcid
-  -h, --help                    help for geektime-downloader
-  -u, --phone string            你的极客时间账号(手机号)
-  -q, --quality string          下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")  
+      --comments         是否需要专栏的第一页评论 (default true)
+  -f, --folder string    专栏和视频课的下载目标位置 (default "")
+      --gcess string     极客时间 cookie 值 gcess
+      --gcid string      极客时间 cookie 值 gcid
+  -h, --help             help for geektime-downloader
+      --output int8      下载专栏的输出格式(1pdf,2markdown,3all) (default 1)
+  -u, --phone string     你的极客时间账号(手机号)
+  -q, --quality string   下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")  
 ```
 
 ## Note
 
 1. 文件下载目标位置可以通过 help 查看。默认情况下 Windows 位于 %USERPROFILE%/geektime-downloader 下；Unix, 包括 macOS, 位于 $HOME/geektime-downloader 下
 
-2. Ctrl + C 退出程序
+2. 如何查看课程 ID?
 
-3. 默认情况下载专栏的输出格式只有 PDF，可以按需选择是否需要下载 Markdown 格式（--columnOutputType 参数），Markdown 格式虽然显示效果上不及 PDF，但优势为可以显示完整的代码块（PDF 代码块在水平方向太长时会有缺失）并保留了原文中的超链接。
+打开极客时间[课程列表页](https://time.geekbang.org/resource)，选择你想要查看的课程，在新打开的课程详情 Tab 页，查看 URL 最后的数字，例如下面的链接中 100056701 就是课程 ID：
 
-4. 如果选择下载所有后中断程序，可重新进入程序继续下载
+```
+https://time.geekbang.org/column/intro/100056701
+```
 
-5. 通过密码登录的情况下，为了避免多次登录账户，会在目录 [UserConfigDir](https://pkg.go.dev/os#UserConfigDir)/geektime-downloader 下存放用户的登录 cookie，如果不是在自己的电脑上执行，请在使用完毕程序后手动删除
+3. Ctrl + C 退出程序
+
+4. 默认情况下载专栏的输出格式只有 PDF，可以按需选择是否需要下载 Markdown 格式（--output 参数），Markdown 格式虽然显示效果上不及 PDF，但优势为可以显示完整的代码块（PDF 代码块在水平方向太长时会有缺失）并保留了原文中的超链接。
+
+5. 如果选择下载所有后中断程序，可重新进入程序继续下载
+
+6. 通过密码登录的情况下，为了避免多次登录账户，会在目录 [UserConfigDir](https://pkg.go.dev/os#UserConfigDir)/geektime-downloader 下存放用户的登录 cookie，如果不是在自己的电脑上执行，请在使用完毕程序后手动删除
 
 ## Inspired by 
 
