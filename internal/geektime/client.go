@@ -169,19 +169,6 @@ func GetColumnInfo(productID int) (Product, error) {
 	return p, ErrGeekTimeAPIBadCode{ColumnInfoV3Path, result.Code, ""}
 }
 
-// GetProductList call geektime api to get product list
-func GetProductList() ([]Product, error) {
-	if err := Auth(); err != nil {
-		return nil, err
-	}
-	var products []Product
-	products, err := appendProducts(0, products)
-	if err != nil {
-		return nil, err
-	}
-	return products, nil
-}
-
 // GetArticles call geektime api to get article list
 func GetArticles(cid string) ([]Article, error) {
 	if err := Auth(); err != nil {
@@ -319,72 +306,4 @@ func Auth() error {
 	}
 	// status code 452
 	return ErrAuthFailed
-}
-
-func appendProducts(prev int, products []Product) ([]Product, error) {
-	var result struct {
-		Code int `json:"code"`
-		Data struct {
-			List []struct {
-				Score int `json:"score"`
-			} `json:"list"`
-			Products []struct {
-				ID     int    `json:"id"`
-				Title  string `json:"title"`
-				Author struct {
-					Name string `json:"name"`
-				} `json:"author"`
-				Type string `json:"type"`
-			} `json:"products"`
-			Page struct {
-				More bool `json:"more"`
-			} `json:"page"`
-		} `json:"data"`
-		Error struct {
-			Code int    `json:"code"`
-			Msg  string `json:"msg"`
-		} `json:"error"`
-	}
-	_, err := geekTimeClient.R().
-		SetBody(
-			map[string]interface{}{
-				"desc":             false,
-				"expire":           1,
-				"last_learn":       0,
-				"learn_status":     0,
-				"prev":             prev,
-				"size":             20,
-				"sort":             1,
-				"type":             "",
-				"with_learn_count": 1,
-			}).
-		SetResult(&result).
-		Post(ProductPath)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if result.Code == 0 {
-		for _, v := range result.Data.Products {
-			// For now we can only download column and video
-			if v.Type == "c1" || v.Type == "c3" {
-				products = append(products, Product{
-					ID:    v.ID,
-					Title: v.Title,
-					Type:  v.Type,
-				})
-			}
-		}
-		if result.Data.Page.More {
-			score := result.Data.List[0].Score
-			products, err = appendProducts(score, products)
-			if err != nil {
-				return nil, err
-			}
-		}
-		return products, nil
-	}
-
-	return nil, ErrGeekTimeAPIBadCode{ProductPath, result.Code, ""}
 }
