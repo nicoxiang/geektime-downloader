@@ -30,17 +30,16 @@ import (
 )
 
 var (
-	phone               string
-	gcid                string
-	gcess               string
-	concurrency         int
-	downloadFolder      string
-	sp                  *spinner.Spinner
-	products            []geektime.Product
-	currentProductIndex int
-	quality             string
-	downloadComments    bool
-	columnOutputType    int8
+	phone            string
+	gcid             string
+	gcess            string
+	concurrency      int
+	downloadFolder   string
+	sp               *spinner.Spinner
+	currentProduct   geektime.Product
+	quality          string
+	downloadComments bool
+	columnOutputType int8
 )
 
 func init() {
@@ -54,7 +53,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "专栏和视频课的下载目标位置")
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
-	rootCmd.Flags().Int8Var(&columnOutputType, "columnOutputType", 1, "下载专栏的输出格式(1pdf,2markdown,3all)")
+	rootCmd.Flags().Int8Var(&columnOutputType, "output", 1, "下载专栏的输出格式(1pdf,2markdown,3all)")
 
 	sp = spinner.New(spinner.CharSets[4], 100*time.Millisecond)
 }
@@ -88,7 +87,8 @@ var rootCmd = &cobra.Command{
 					}
 					return nil
 				},
-				Mask: '*',
+				Mask:        '*',
+				HideEntered: true,
 			}
 			pwd, err := prompt.Run()
 			checkError(err)
@@ -102,36 +102,44 @@ var rootCmd = &cobra.Command{
 			err = config.WriteCookieToConfigFile(phone, readCookies)
 			checkError(err)
 			sp.Stop()
-			fmt.Println("登录成功")
+			fmt.Fprintln(os.Stderr, "登录成功")
 		}
 		geektime.InitClient(readCookies)
+
+		//first time auth check
+		if err := geektime.Auth(); err != nil {
+			checkError(geektime.ErrAuthFailed)
+		}
+
 		selectProduct(cmd.Context())
 	},
 }
 
 func selectProduct(ctx context.Context) {
-	loadProducts()
-	templates := &promptui.SelectTemplates{
-		Label:    "{{ . }}",
-		Active:   "{{ `>` | red }} {{if eq .Type `c1`}} {{ `专栏` | red }} {{else}} {{ `视频课` | red }} {{end}} {{ .Title | red }} {{ .AuthorName | red }}",
-		Inactive: "{{if eq .Type `c1`}} {{ `专栏` }} {{else}} {{ `视频课` }} {{end}} {{ .Title }} {{ .AuthorName }}",
+	prompt := promptui.Prompt{
+		Label: "请输入课程 ID",
+		Validate: func(s string) error {
+			if strings.TrimSpace(s) == "" {
+				return errors.New("课程 ID 不能为空")
+			}
+			if _, err := strconv.Atoi(s); err != nil {
+				return errors.New("课程 ID 格式不合法")
+			}
+			return nil
+		},
+		HideEntered: true,
 	}
-	prompt := promptui.Select{
-		Label:        "我的课程列表, 请选择: ",
-		Items:        products,
-		Templates:    templates,
-		Size:         20,
-		HideSelected: true,
-		Stdout:       NoBellStdout,
-	}
-	index, _, err := prompt.Run()
+	s, err := prompt.Run()
 	checkError(err)
-	currentProductIndex = index
-	handleSelectProduct(ctx)
+
+	// ignore, because checked before
+	id, _ := strconv.Atoi(s)
+	loadProduct(ctx, id)
+
+	productOps(ctx)
 }
 
-func handleSelectProduct(ctx context.Context) {
-	currentProduct := products[currentProductIndex]
+func productOps(ctx context.Context) {
 	type option struct {
 		Text  string
 		Value int
@@ -160,11 +168,8 @@ func handleSelectProduct(ctx context.Context) {
 	}
 	index, _, err := prompt.Run()
 	checkError(err)
-	handleSelectProductOps(ctx, index)
-}
 
-func handleSelectProductOps(ctx context.Context, option int) {
-	switch option {
+	switch index {
 	case 0:
 		selectProduct(ctx)
 	case 1:
@@ -175,14 +180,14 @@ func handleSelectProductOps(ctx context.Context, option int) {
 }
 
 func selectArticle(ctx context.Context) {
-	articles := loadArticles()
+	loadArticles()
 	items := []geektime.Article{
 		{
 			AID:   -1,
 			Title: "返回上一级",
 		},
 	}
-	items = append(items, articles...)
+	items = append(items, currentProduct.Articles...)
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
 		Active:   "{{ `>` | red }} {{ .Title | red }}",
@@ -199,16 +204,16 @@ func selectArticle(ctx context.Context) {
 	}
 	index, _, err := prompt.Run()
 	checkError(err)
-	handleSelectArticle(ctx, articles, index)
+	handleSelectArticle(ctx, index)
 }
 
-func handleSelectArticle(ctx context.Context, articles []geektime.Article, index int) {
+func handleSelectArticle(ctx context.Context, index int) {
 	if index == 0 {
-		handleSelectProduct(ctx)
+		productOps(ctx)
 	}
-	a := articles[index-1]
+	a := currentProduct.Articles[index-1]
 
-	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, products[currentProductIndex].Title)
+	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, currentProduct.Title)
 	checkError(err)
 	downloadArticle(ctx, a, projectDir)
 	fmt.Printf("\r%s 下载完成", a.Title)
@@ -217,17 +222,15 @@ func handleSelectArticle(ctx context.Context, articles []geektime.Article, index
 }
 
 func handleDownloadAll(ctx context.Context) {
-	cTitle := products[currentProductIndex].Title
-	articles := loadArticles()
-
-	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, cTitle)
+	loadArticles()
+	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, currentProduct.Title)
 	checkError(err)
 	downloaded, err := findDownloadedArticleFileNames(projectDir)
 	checkError(err)
 	if isColumn() {
 		rand.Seed(time.Now().UnixNano())
-		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", cTitle)
-		total := len(articles)
+		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", currentProduct.Title)
+		total := len(currentProduct.Articles)
 		var i int
 
 		var chromedpCtx context.Context
@@ -241,7 +244,7 @@ func handleDownloadAll(ctx context.Context) {
 			defer cancel()
 		}
 
-		for _, a := range articles {
+		for _, a := range currentProduct.Articles {
 			fileName := filenamify.Filenamify(a.Title)
 			var b int8
 			_, pdfExists := downloaded[fileName+pdf.PDFExtension]
@@ -283,7 +286,7 @@ func handleDownloadAll(ctx context.Context) {
 			time.Sleep(time.Duration(r) * time.Millisecond)
 		}
 	} else if isVideo() {
-		for _, a := range articles {
+		for _, a := range currentProduct.Articles {
 			fileName := filenamify.Filenamify(a.Title) + video.TSExtension
 			if _, ok := downloaded[fileName]; ok {
 				continue
@@ -302,37 +305,31 @@ func increasePDFCount(total int, i *int) {
 	fmt.Printf("\r已完成下载%d/%d", *i, total)
 }
 
-func loadProducts() {
-	if len(products) > 0 {
-		return
+func loadArticles() {
+	if len(currentProduct.Articles) <= 0 {
+		sp.Prefix = "[ 正在加载文章列表... ]"
+		sp.Start()
+		articles, err := geektime.GetArticles(strconv.Itoa(currentProduct.ID))
+		checkError(err)
+		currentProduct.Articles = articles
+		sp.Stop()
 	}
-	sp.Prefix = "[ 正在加载已购买课程列表... ]"
+}
+
+func loadProduct(ctx context.Context, productID int) {
+	sp.Prefix = "[ 正在加载课程信息... ]"
 	sp.Start()
-	p, err := geektime.GetProductList()
+	p, err := geektime.GetColumnInfo(productID)
 	if err != nil {
 		sp.Stop()
 		checkError(err)
 	}
-	if len(p) <= 0 {
-		sp.Stop()
-		fmt.Print("当前账户没有已购买课程")
-		os.Exit(1)
-	}
-	products = p
 	sp.Stop()
-}
-
-func loadArticles() []geektime.Article {
-	p := products[currentProductIndex]
-	if len(p.Articles) <= 0 {
-		sp.Prefix = "[ 正在加载文章列表... ]"
-		sp.Start()
-		articles, err := geektime.GetArticles(strconv.Itoa(p.ID))
-		checkError(err)
-		products[currentProductIndex].Articles = articles
-		sp.Stop()
+	if !p.Access {
+		fmt.Fprint(os.Stderr, "尚未购买该课程\n")
+		selectProduct(ctx)
 	}
-	return products[currentProductIndex].Articles
+	currentProduct = p
 }
 
 func downloadArticle(ctx context.Context, article geektime.Article, projectDir string) {
@@ -377,11 +374,11 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 }
 
 func isColumn() bool {
-	return products[currentProductIndex].Type == "c1"
+	return currentProduct.Type == "c1"
 }
 
 func isVideo() bool {
-	return products[currentProductIndex].Type == "c3"
+	return currentProduct.Type == "c3"
 }
 
 func readCookiesFromInput() []*http.Cookie {
