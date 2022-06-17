@@ -101,7 +101,7 @@ func DownloadVideo(ctx context.Context, m3u8url, title, projectDir string, size 
 	}
 	// temp folder cleanup
 	defer func() {
-		os.RemoveAll(tempVideoDir)
+		err = os.RemoveAll(tempVideoDir)
 	}()
 
 	// classic bounded work pooling pattern
@@ -196,6 +196,7 @@ func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte) 
 	sort.Sort(ByNumericalFilename(tempTSFiles))
 	fullPath := filepath.Join(projectDir, filenamifyTitle+TSExtension)
 	finalVideoFile, err := os.OpenFile(fullPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, os.ModePerm)
+	defer finalVideoFile.Close()
 	if err != nil {
 		return err
 	}
