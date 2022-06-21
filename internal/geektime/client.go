@@ -1,7 +1,6 @@
 package geektime
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -26,8 +25,6 @@ const (
 var (
 	geekTimeClient *resty.Client
 	accountClient  *resty.Client
-	// ErrAuthFailed ...
-	ErrAuthFailed = errors.New("当前账户在其他设备登录或者登录已经过期, 请尝试重新登录")
 	// SiteCookies ...
 	SiteCookies []*http.Cookie
 )
@@ -143,7 +140,7 @@ func GetColumnInfo(productID int) (Product, error) {
 			} `json:"extra"`
 		} `json:"data"`
 	}
-	_, err := geekTimeClient.R().
+	resp, err := geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
 				"product_id":             productID,
@@ -154,6 +151,10 @@ func GetColumnInfo(productID int) (Product, error) {
 
 	if err != nil {
 		return p, err
+	}
+
+	if resp.RawResponse.StatusCode == 451 {
+		return p, pgt.ErrGeekTimeRateLimit
 	}
 
 	if result.Code == 0 {
@@ -184,7 +185,7 @@ func GetArticles(cid string) ([]Article, error) {
 			} `json:"list"`
 		} `json:"data"`
 	}
-	_, err := geekTimeClient.R().
+	resp, err := geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
 				"cid":    cid,
@@ -198,6 +199,10 @@ func GetArticles(cid string) ([]Article, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	if resp.RawResponse.StatusCode == 451 {
+		return nil, pgt.ErrGeekTimeRateLimit
 	}
 
 	if result.Code == 0 {
@@ -258,12 +263,12 @@ func GetVideoInfo(articleID int, quality string) (VideoInfo, error) {
 
 // GetArticleInfo ...
 func GetArticleInfo[R ArticleResponse](articleID int) (R, error) {
-	var response R
+	var result R
 	if err := Auth(); err != nil {
-		return response, err
+		return result, err
 	}
 
-	_, err := geekTimeClient.R().
+	resp, err := geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
 				"id":                strconv.Itoa(articleID),
@@ -271,14 +276,18 @@ func GetArticleInfo[R ArticleResponse](articleID int) (R, error) {
 				"is_freelyread":     true,
 				"reverse":           false,
 			}).
-		SetResult(&response).
+		SetResult(&result).
 		Post(ArticleV1Path)
 
 	if err != nil {
-		return response, err
+		return result, err
 	}
 
-	return response, nil
+	if resp.RawResponse.StatusCode == 451 {
+		return result, pgt.ErrGeekTimeRateLimit
+	}
+
+	return result, nil
 }
 
 // Auth check if current user login is expired or login in another device
@@ -302,8 +311,8 @@ func Auth() error {
 		}
 		// result Code -1
 		// {\"error\":{\"msg\":\"未登录\",\"code\":-2000}
-		return ErrAuthFailed
+		return pgt.ErrAuthFailed
 	}
 	// status code 452
-	return ErrAuthFailed
+	return pgt.ErrAuthFailed
 }

@@ -2,7 +2,6 @@ package pdf
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -21,9 +20,6 @@ import (
 
 // PDFExtension ...
 const PDFExtension = ".pdf"
-
-// ErrGeekTimeRateLimit ...
-var ErrGeekTimeRateLimit = errors.New("已触发限流, 你可以选择重新登录/重新获取 cookie, 或者稍后再试, 然后生成剩余的文章")
 
 // PrintArticlePageToPDF use chromedp to print article page and save
 func PrintArticlePageToPDF(ctx context.Context, aid int, dir, title string, cookies []*http.Cookie, downloadComments bool) error {
@@ -64,7 +60,7 @@ func PrintArticlePageToPDF(ctx context.Context, aid int, dir, title string, cook
 
 	if err != nil {
 		if rateLimit {
-			return ErrGeekTimeRateLimit
+			return pgt.ErrGeekTimeRateLimit
 		}
 		return err
 	}

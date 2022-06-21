@@ -108,7 +108,7 @@ var rootCmd = &cobra.Command{
 
 		//first time auth check
 		if err := geektime.Auth(); err != nil {
-			checkError(geektime.ErrAuthFailed)
+			checkError(pgt.ErrAuthFailed)
 		}
 
 		selectProduct(cmd.Context())

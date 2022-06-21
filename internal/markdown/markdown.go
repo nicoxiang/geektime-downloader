@@ -85,6 +85,9 @@ func Download(ctx context.Context, html, title, dir string, aid, concurrency int
 
 	fullName := path.Join(dir, filenamify.Filenamify(title)+MDExtension)
 	f, err := os.Create(fullName)
+	defer func() {
+		_ = f.Close()
+	}()
 	if err != nil {
 		return err
 	}
