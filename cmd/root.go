@@ -56,6 +56,10 @@ func init() {
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
 	rootCmd.Flags().IntVar(&columnOutputType, "output", 1, "专栏的输出内容(1pdf,2markdown,4audio)可自由组合")
 
+	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcid")
+	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcess")
+	rootCmd.MarkFlagsRequiredTogether("gcid", "gcess")
+
 	sp = spinner.New(spinner.CharSets[4], 100*time.Millisecond)
 }
 
