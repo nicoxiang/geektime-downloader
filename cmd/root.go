@@ -19,6 +19,7 @@ import (
 	"github.com/briandowns/spinner"
 	"github.com/chromedp/chromedp"
 	"github.com/manifoldco/promptui"
+	"github.com/nicoxiang/geektime-downloader/internal/audio"
 	"github.com/nicoxiang/geektime-downloader/internal/config"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/markdown"
@@ -39,7 +40,7 @@ var (
 	currentProduct   geektime.Product
 	quality          string
 	downloadComments bool
-	columnOutputType int8
+	columnOutputType int
 )
 
 func init() {
@@ -53,7 +54,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "专栏和视频课的下载目标位置")
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
-	rootCmd.Flags().Int8Var(&columnOutputType, "output", 1, "下载专栏的输出格式(1pdf,2markdown,3all)")
+	rootCmd.Flags().IntVar(&columnOutputType, "output", 1, "专栏的输出内容(1pdf,2markdown,4audio)可自由组合")
 
 	sp = spinner.New(spinner.CharSets[4], 100*time.Millisecond)
 }
@@ -65,7 +66,7 @@ var rootCmd = &cobra.Command{
 		if quality != "ld" && quality != "sd" && quality != "hd" {
 			exitWithMsg("argument 'quality' is not valid")
 		}
-		if columnOutputType <= 0 || columnOutputType >= 4 {
+		if columnOutputType <= 0 || columnOutputType >= 8 {
 			exitWithMsg("argument 'columnOutputType' is not valid")
 		}
 		var readCookies []*http.Cookie
@@ -236,7 +237,7 @@ func handleDownloadAll(ctx context.Context) {
 		var chromedpCtx context.Context
 		var cancel context.CancelFunc
 
-		if columnOutputType == 3 || columnOutputType == 1 {
+		if columnOutputType&1 == 1 {
 			chromedpCtx, cancel = chromedp.NewContext(ctx)
 			// start the browser
 			err := chromedp.Run(chromedpCtx)
@@ -246,14 +247,15 @@ func handleDownloadAll(ctx context.Context) {
 
 		for _, a := range currentProduct.Articles {
 			fileName := filenamify.Filenamify(a.Title)
-			var b int8
-			_, pdfExists := downloaded[fileName+pdf.PDFExtension]
-			if pdfExists {
-				b = 1
+			var b int
+			if _, exists := downloaded[fileName+pdf.PDFExtension]; exists {
+				b = setBit(b, 0)
 			}
-			_, mdExists := downloaded[fileName+markdown.MDExtension]
-			if mdExists {
-				b |= (1 << 1)
+			if _, exists := downloaded[fileName+markdown.MDExtension]; exists {
+				b = setBit(b, 1)
+			}
+			if _, exists := downloaded[fileName+audio.MP3Extension]; exists {
+				b = setBit(b, 2)
 			}
 
 			if b == columnOutputType {
@@ -261,26 +263,42 @@ func handleDownloadAll(ctx context.Context) {
 				continue
 			}
 
-			if (columnOutputType&1 == 1) && !pdfExists {
-				if err := pdf.PrintArticlePageToPDF(chromedpCtx,
+			var err error
+
+			if columnOutputType&^b&1 == 1 {
+				err = pdf.PrintArticlePageToPDF(chromedpCtx,
 					a.AID,
 					projectDir,
 					a.Title,
 					geektime.SiteCookies,
 					downloadComments,
-				); err != nil {
+				)
+				if err != nil {
 					// ensure chrome killed before os exit
 					cancel()
 					checkError(err)
 				}
 			}
-			if ((columnOutputType>>1)&1 == 1) && !mdExists {
-				html, err := geektime.GetColumnContent(a.AID)
-				checkError(err)
-				err = markdown.Download(ctx, html, a.Title, projectDir, a.AID, concurrency)
+
+			var articleInfo geektime.ArticleInfo
+			needDownloadMD := (columnOutputType>>1)&^(b>>1)&1 == 1
+			needDownloadAudio := (columnOutputType>>2)&^(b>>2)&1 == 1
+
+			if needDownloadMD || needDownloadAudio {
+				articleInfo, err = geektime.GetColumnArticleInfo(a.AID)
 				checkError(err)
 			}
 
+			if needDownloadMD {
+				err = markdown.Download(ctx, articleInfo.ArticleContent, a.Title, projectDir, a.AID, concurrency)
+			}
+
+			if needDownloadAudio {
+				err = audio.DownloadAudio(ctx, articleInfo.AudioDownloadURL, projectDir, a.Title)
+			}
+
+			checkError(err)
+	
 			increasePDFCount(total, &i)
 			r := rand.Intn(2000)
 			time.Sleep(time.Duration(r) * time.Millisecond)
@@ -358,12 +376,26 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 			}
 		}
 
-		if (columnOutputType>>1)&1 == 1 {
-			html, err := geektime.GetColumnContent(article.AID)
-			checkError(err)
-			err = markdown.Download(ctx, html, article.Title, projectDir, article.AID, concurrency)
+		var articleInfo geektime.ArticleInfo
+		var err error
+		needDownloadMD := (columnOutputType>>1)&1 == 1
+		needDownloadAudio := (columnOutputType>>2)&1 == 1
+
+		if needDownloadMD || needDownloadAudio {
+			articleInfo, err = geektime.GetColumnArticleInfo(article.AID)
 			checkError(err)
 		}
+
+		if needDownloadMD {
+			err = markdown.Download(ctx, articleInfo.ArticleContent, article.Title, projectDir, article.AID, concurrency)
+		}
+
+		if needDownloadAudio {
+			err = audio.DownloadAudio(ctx, articleInfo.AudioDownloadURL, projectDir, article.Title)
+		}
+
+		checkError(err)
+
 		sp.Stop()
 	} else if isVideo() {
 		videoInfo, err := geektime.GetVideoInfo(article.AID, quality)
@@ -379,6 +411,12 @@ func isColumn() bool {
 
 func isVideo() bool {
 	return currentProduct.Type == "c3"
+}
+
+// Sets the bit at pos in the integer n.
+func setBit(n int, pos uint) int {
+	n |= (1 << pos)
+	return n
 }
 
 func readCookiesFromInput() []*http.Cookie {

@@ -150,7 +150,8 @@ loop:
 			c.SetOutputDirectory(tempVideoDir).
 				SetTimeout(time.Minute).
 				SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
-				SetHeader(pgt.OriginHeaderName, pgt.GeekBang)
+				SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
+				SetLogger(logger.DiscardLogger{})
 
 			resp, err := c.R().
 				SetContext(ctx).

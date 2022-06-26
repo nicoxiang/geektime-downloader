@@ -62,12 +62,19 @@ type VideoInfo struct {
 	Size    int
 }
 
+// ArticleInfo ...
+type ArticleInfo struct {
+	ArticleContent   string
+	AudioDownloadURL string
+}
+
 // ColumnResponse ...
 type ColumnResponse struct {
 	Code int `json:"code"`
 	Data struct {
-		ArticleTitle   string `json:"article_title"`
-		ArticleContent string `json:"article_content"`
+		ArticleTitle     string `json:"article_title"`
+		ArticleContent   string `json:"article_content"`
+		AudioDownloadURL string `json:"audio_download_url"`
 	} `json:"data"`
 }
 
@@ -160,9 +167,9 @@ func GetColumnInfo(productID int) (Product, error) {
 	if result.Code == 0 {
 		p = Product{
 			Access: result.Data.Extra.Sub.AccessMask > 0,
-			ID:    result.Data.ID,
-			Type:  result.Data.Type,
-			Title: result.Data.Title,
+			ID:     result.Data.ID,
+			Type:   result.Data.Type,
+			Title:  result.Data.Title,
 		}
 		return p, nil
 	}
@@ -219,23 +226,27 @@ func GetArticles(cid string) ([]Article, error) {
 	return nil, ErrGeekTimeAPIBadCode{ArticlesPath, result.Code, ""}
 }
 
-// GetColumnContent ...
-func GetColumnContent(articleID int) (string, error) {
-	a, err := GetArticleInfo[ColumnResponse](articleID)
+// GetColumnArticleInfo ...
+func GetColumnArticleInfo(articleID int) (ArticleInfo, error) {
+	var a ArticleInfo
+	ar, err := GetArticleResponse[ColumnResponse](articleID)
 	if err != nil {
-		return "", err
+		return a, err
 	}
-	if a.Code != 0 {
-		return "", ErrGeekTimeAPIBadCode{ArticleV1Path, a.Code, ""}
+	if ar.Code != 0 {
+		return a, ErrGeekTimeAPIBadCode{ArticleV1Path, ar.Code, ""}
 	}
 
-	return a.Data.ArticleContent, err
+	return ArticleInfo{
+		ar.Data.ArticleContent,
+		ar.Data.AudioDownloadURL,
+	}, err
 }
 
 // GetVideoInfo ...
 func GetVideoInfo(articleID int, quality string) (VideoInfo, error) {
 	var v VideoInfo
-	a, err := GetArticleInfo[VideoResponse](articleID)
+	a, err := GetArticleResponse[VideoResponse](articleID)
 	if err != nil {
 		return v, err
 	}
@@ -261,8 +272,8 @@ func GetVideoInfo(articleID int, quality string) (VideoInfo, error) {
 	return v, nil
 }
 
-// GetArticleInfo ...
-func GetArticleInfo[R ArticleResponse](articleID int) (R, error) {
+// GetArticleResponse get column or video response
+func GetArticleResponse[R ArticleResponse](articleID int) (R, error) {
 	var result R
 	if err := Auth(); err != nil {
 		return result, err
