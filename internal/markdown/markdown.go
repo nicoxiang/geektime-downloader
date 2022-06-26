@@ -151,7 +151,7 @@ loop:
 				continue
 			}
 
-			ms.ReplaceAll(imageURL, rel)
+			ms.ReplaceAll(imageURL, filepath.ToSlash(rel))
 		}
 	}
 	if len(es) > 0 {
