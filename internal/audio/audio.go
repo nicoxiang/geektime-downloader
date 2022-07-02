@@ -20,6 +20,9 @@ const (
 
 // DownloadAudio ...
 func DownloadAudio(ctx context.Context, downloadAudioURL, dir, title string) error {
+	if downloadAudioURL == "" {
+		return nil
+	}
 	filenamifyTitle := filenamify.Filenamify(title)
 	c := resty.New()
 	c.SetOutputDirectory(dir).
