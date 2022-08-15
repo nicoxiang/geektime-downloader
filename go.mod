@@ -6,8 +6,8 @@ require (
 	github.com/JohannesKaufmann/html-to-markdown v1.3.5
 	github.com/briandowns/spinner v1.19.0
 	github.com/cheggaaa/pb/v3 v3.1.0
-	github.com/chromedp/cdproto v0.0.0-20220725225757-5988d9195a6c
-	github.com/chromedp/chromedp v0.8.3
+	github.com/chromedp/cdproto v0.0.0-20220812200530-d0d83820bffc
+	github.com/chromedp/chromedp v0.8.4
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/spf13/cobra v1.5.0
@@ -30,7 +30,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
-	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8 // indirect
+	golang.org/x/sys v0.0.0-20220811171246-fbc7d0a398ab // indirect
 )
 
 require (
