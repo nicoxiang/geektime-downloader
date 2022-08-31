@@ -10,6 +10,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/config"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 func checkError(err error) {
@@ -32,8 +33,10 @@ func checkError(err error) {
 			errors.Is(err, pgt.ErrAuthFailed) {
 			exitAndRemoveConfig(err)
 		} else if os.IsTimeout(err) {
+			logger.Error(err, "Request Timeout")
 			exitWithMsg("请求超时")
 		} else {
+			logger.Error(err, "An error occurred")
 			fmt.Fprintf(os.Stderr, "An error occurred: %v\n", err.Error())
 			os.Exit(1)
 		}

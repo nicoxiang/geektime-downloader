@@ -12,7 +12,6 @@ import (
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/cheggaaa/pb/v3"
@@ -29,9 +28,17 @@ const (
 	TSExtension = ".ts"
 )
 
-var clientOnce struct {
-	sync.Once
-	c *resty.Client
+var (
+	client *resty.Client
+)
+
+func init() {
+	client = resty.New().
+		SetRetryCount(1).
+		SetTimeout(10*time.Second).
+		SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
+		SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
+		SetLogger(logger.DiscardLogger{})
 }
 
 // ByNumericalFilename implement sort interface, order by file name suffix number
@@ -58,20 +65,10 @@ func (nf ByNumericalFilename) Less(i, j int) bool {
 	return a < b
 }
 
-func getClient() *resty.Client {
-	clientOnce.Do(func() {
-		clientOnce.c = resty.New().
-			SetRetryCount(1).
-			SetTimeout(10*time.Second).
-			SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
-			SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
-			SetLogger(logger.DiscardLogger{})
-	})
-	return clientOnce.c
-}
-
 // DownloadVideo ...
 func DownloadVideo(ctx context.Context, m3u8url, title, projectDir string, size int64, concurrency int) (err error) {
+	resetRestyOptions()
+
 	i := strings.LastIndex(m3u8url, "/")
 	tsURLPrefix := m3u8url[:i+1]
 	filenamifyTitle := filenamify.Filenamify(title)
@@ -101,19 +98,21 @@ func DownloadVideo(ctx context.Context, m3u8url, title, projectDir string, size 
 	}
 	// temp folder cleanup
 	defer func() {
-		err = os.RemoveAll(tempVideoDir)
+		_ = os.RemoveAll(tempVideoDir)
 	}()
 
 	// classic bounded work pooling pattern
-	g := new(errgroup.Group)
+	g, ctx := errgroup.WithContext(ctx)
 	ch := make(chan string, concurrency)
 
 	bar := newBar(size, fmt.Sprintf("[正在下载 %s] ", filenamifyTitle))
 	bar.Start()
 
+	setVideoDownloadClientOptions(tempVideoDir)
+
 	for i := 0; i < concurrency; i++ {
 		g.Go(func() error {
-			return writeToTempVideoFile(ctx, ch, bar, tsURLPrefix, tempVideoDir)
+			return writeToTempVideoFile(ctx, ch, bar, tsURLPrefix)
 		})
 	}
 
@@ -133,45 +132,27 @@ func DownloadVideo(ctx context.Context, m3u8url, title, projectDir string, size 
 	return
 }
 
-func writeToTempVideoFile(ctx context.Context, tsFileNames chan string, bar *pb.ProgressBar, tsURLPrefix, tempVideoDir string) (err error) {
-	var es []error
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			// Drain tsFileNames to allow existing goroutines to finish.
+func writeToTempVideoFile(ctx context.Context,
+	tsFileNames chan string,
+	bar *pb.ProgressBar,
+	tsURLPrefix string) (err error) {
+	for tsFileName := range tsFileNames {
+		resp, err := client.R().
+			SetContext(ctx).
+			SetOutput(tsFileName).
+			Get(tsURLPrefix + tsFileName)
+		if err != nil {
 			for range tsFileNames {
 			}
-		case tsFileName, ok := <-tsFileNames:
-			if !ok {
-				break loop
-			}
-			c := resty.New()
-			c.SetOutputDirectory(tempVideoDir).
-				SetTimeout(time.Minute).
-				SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
-				SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
-				SetLogger(logger.DiscardLogger{})
-
-			resp, err := c.R().
-				SetContext(ctx).
-				SetOutput(tsFileName).
-				Get(tsURLPrefix + tsFileName)
-			if err != nil {
-				es = append(es, err)
-				continue
-			}
-			addBarValue(bar, resp.Size())
+			return err
 		}
-	}
-	if len(es) > 0 {
-		return es[0]
+		addBarValue(bar, resp.Size())
 	}
 	return nil
 }
 
 func readM3U8File(ctx context.Context, url string) (decryptkmsURL string, tsFileNames []string, err error) {
-	resp, err := getClient().R().SetContext(ctx).Get(url)
+	resp, err := client.R().SetContext(ctx).Get(url)
 	if err != nil {
 		return
 	}
@@ -224,7 +205,7 @@ func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte) 
 }
 
 func getDecryptKey(ctx context.Context, decryptkmsURL string) (key []byte, err error) {
-	keyResp, err := getClient().R().SetContext(ctx).Get(decryptkmsURL)
+	keyResp, err := client.R().SetContext(ctx).Get(decryptkmsURL)
 	if err != nil {
 		return
 	}
@@ -264,4 +245,16 @@ func addBarValue(bar *pb.ProgressBar, written int64) {
 	} else {
 		bar.Add64(written)
 	}
+}
+
+func resetRestyOptions() {
+	client.SetTimeout(10 * time.Second).
+		SetRetryCount(1).
+		SetOutputDirectory("")
+}
+
+func setVideoDownloadClientOptions(tempVideoDir string) {
+	client.SetTimeout(time.Minute).
+		SetRetryCount(0).
+		SetOutputDirectory(tempVideoDir)
 }

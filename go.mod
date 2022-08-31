@@ -29,6 +29,7 @@ require (
 	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/mattn/go-runewidth v0.0.13 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/stretchr/testify v1.7.1 // indirect
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
 	golang.org/x/sys v0.0.0-20220715151400-c0bba94af5f8 // indirect
 )
@@ -36,5 +37,6 @@ require (
 require (
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
 	github.com/manifoldco/promptui v0.9.0
+	github.com/sirupsen/logrus v1.9.0
 	github.com/spf13/pflag v1.0.5 // indirect
 )
