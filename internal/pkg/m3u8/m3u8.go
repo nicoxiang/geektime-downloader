@@ -2,8 +2,6 @@ package m3u8
 
 import (
 	"bufio"
-	"net/url"
-	"path"
 	"regexp"
 	"strings"
 	"time"
@@ -29,11 +27,6 @@ func init() {
 
 // Parse do m3u8 url GET request, and extract ts file names and decrypt key from that
 func Parse(m3u8url string) (tsFileNames []string, keyURI string, err error) {
-	// u, err := url.Parse(m3u8url)
-	// if err != nil {
-	// 	return nil, nil, err
-	// }
-
 	m3u8Resp, err := client.R().SetDoNotParseResponse(true).Get(m3u8url)
 	if err != nil {
 		return nil, "", err
@@ -45,9 +38,6 @@ func Parse(m3u8url string) (tsFileNames []string, keyURI string, err error) {
 		lines = append(lines, s.Text())
 	}
 
-	// URI
-	// old version: https://misc.geekbang.org/serv/v1/decrypt/decryptkms/?Ciphertext=longlongstring
-	// new version: longlongstring
 	gotKeyURI := false
 
 	for _, line := range lines {
@@ -73,18 +63,4 @@ func parseLineParameters(line string) map[string]string {
 		params[arr[1]] = strings.Trim(arr[2], "\"")
 	}
 	return params
-}
-
-func resolveURL(u *url.URL, p string) string {
-	if strings.HasPrefix(p, "https://") || strings.HasPrefix(p, "http://") {
-		return p
-	}
-	var baseURL string
-	if strings.Index(p, "/") == 0 {
-		baseURL = u.Scheme + "://" + u.Host
-	} else {
-		tU := u.String()
-		baseURL = tU[0:strings.LastIndex(tU, "/")]
-	}
-	return baseURL + path.Join("/", p)
 }

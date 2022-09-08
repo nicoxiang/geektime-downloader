@@ -24,6 +24,13 @@ const (
 	PlayAuthV1Path = "/serv/v1/video/play-auth"
 	// MyClassInfoV1Path ...
 	MyClassInfoV1Path = "/serv/v1/myclass/info"
+
+	// ProductTypeColumn c1 column
+	ProductTypeColumn = "c1"
+	// ProductTypeNormalVideo c3 normal video
+	ProductTypeNormalVideo = "c3"
+	// ProductTypeUniversityVideo u university video
+	ProductTypeUniversityVideo = "u"
 )
 
 var (
@@ -421,7 +428,7 @@ func GetMyClassProduct(classID int) (Product, error) {
 		Access: true,
 		ID:     classID,
 		Title:  resp.Data.Title,
-		Type:   "university",
+		Type:   ProductTypeUniversityVideo,
 	}
 	var articles []Article
 	for _, lesson := range resp.Data.Lessons {

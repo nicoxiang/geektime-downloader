@@ -22,7 +22,7 @@ gBLHdydsftMVPNHrRuPKQNZRslWE1vvgx80w9lCllIUCAwEAAQ==
 func RSAEncrypt(origData []byte) (string, error) {
 	block, _ := pem.Decode([]byte(PublicKeyStr))
 	if block == nil {
-		return "", errors.New("public key error")
+		return "", errors.New("rsa encrypt public key error")
 	}
 	pubInterface, err := x509.ParsePKIXPublicKey(block.Bytes)
 	if err != nil {

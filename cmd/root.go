@@ -157,7 +157,11 @@ func productOps(ctx context.Context) {
 		options[1] = option{"下载当前专栏所有文章", 1}
 		options[2] = option{"选择文章", 2}
 	} else if isVideo() {
-		options[1] = option{"下载当前视频课所有视频", 1}
+		s1 := "下载当前视频课所有视频"
+		if currentProduct.Type == geektime.ProductTypeUniversityVideo {
+			s1 = "下载当前训练营所有视频"
+		}
+		options[1] = option{s1, 1}
 		options[2] = option{"选择视频", 2}
 	}
 	templates := &promptui.SelectTemplates{
@@ -315,14 +319,15 @@ func handleDownloadAll(ctx context.Context) {
 			if _, ok := downloaded[fileName]; ok {
 				continue
 			}
-			if currentProduct.Type == "c3" {
+			if currentProduct.Type == geektime.ProductTypeNormalVideo {
 				videoInfo, err := geektime.GetVideoInfo(a.AID, quality)
 				checkError(err)
 				err = video.DownloadHLSStandardEncryptVideo(ctx, videoInfo.M3U8URL, a.Title, projectDir, int64(videoInfo.Size), concurrency)
-			} else if currentProduct.Type == "university" {
+				checkError(err)
+			} else if currentProduct.Type == geektime.ProductTypeUniversityVideo {
 				err = video.DownloadAliyunVodEncryptVideo(ctx, a.AID, currentProduct, projectDir, quality, concurrency)
+				checkError(err)
 			}
-			checkError(err)
 		}
 	}
 	selectProduct(ctx)
@@ -415,25 +420,24 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 
 		sp.Stop()
 	} else if isVideo() {
-		var err error
-		// TODO: enum
-		if currentProduct.Type == "c3" {
+		if currentProduct.Type == geektime.ProductTypeNormalVideo {
 			videoInfo, err := geektime.GetVideoInfo(article.AID, quality)
 			checkError(err)
 			err = video.DownloadHLSStandardEncryptVideo(ctx, videoInfo.M3U8URL, article.Title, projectDir, int64(videoInfo.Size), concurrency)
-		} else if currentProduct.Type == "university" {
-			err = video.DownloadAliyunVodEncryptVideo(ctx, article.AID, currentProduct, projectDir, quality, concurrency)
+			checkError(err)
+		} else if currentProduct.Type == geektime.ProductTypeUniversityVideo {
+			err := video.DownloadAliyunVodEncryptVideo(ctx, article.AID, currentProduct, projectDir, quality, concurrency)
+			checkError(err)
 		}
-		checkError(err)
 	}
 }
 
 func isColumn() bool {
-	return currentProduct.Type == "c1"
+	return currentProduct.Type == geektime.ProductTypeColumn
 }
 
 func isVideo() bool {
-	return currentProduct.Type == "c3" || currentProduct.Type == "university"
+	return currentProduct.Type == geektime.ProductTypeNormalVideo || currentProduct.Type == geektime.ProductTypeUniversityVideo
 }
 
 // Sets the bit at pos in the integer n.

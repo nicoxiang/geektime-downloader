@@ -44,7 +44,7 @@ func BuildVodGetPlayInfoURL(playAuth, videoID, clientRand string) (string, error
 
 	privateParams := map[string]string{}
 	privateParams["Action"] = "GetPlayInfo"
-	privateParams["AuthInfo"], _ = jsonMap["AuthInfo"]
+	privateParams["AuthInfo"] = jsonMap["AuthInfo"]
 	privateParams["AuthTimeout"] = "7200"
 	privateParams["PlayConfig"] = "{}"
 	privateParams["PlayerVersion"] = "2.8.2"
