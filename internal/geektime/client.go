@@ -20,11 +20,23 @@ const (
 	ArticleV1Path = "/serv/v1/article"
 	// ColumnInfoV3Path ...
 	ColumnInfoV3Path = "/serv/v3/column/info"
+	// PlayAuthV1Path ...
+	PlayAuthV1Path = "/serv/v1/video/play-auth"
+	// MyClassInfoV1Path ...
+	MyClassInfoV1Path = "/serv/v1/myclass/info"
+
+	// ProductTypeColumn c1 column
+	ProductTypeColumn = "c1"
+	// ProductTypeNormalVideo c3 normal video
+	ProductTypeNormalVideo = "c3"
+	// ProductTypeUniversityVideo u university video
+	ProductTypeUniversityVideo = "u"
 )
 
 var (
-	geekTimeClient *resty.Client
-	accountClient  *resty.Client
+	geekTimeClient  *resty.Client
+	accountClient   *resty.Client
+	ugeekTimeClient *resty.Client
 	// SiteCookies ...
 	SiteCookies []*http.Cookie
 )
@@ -68,6 +80,12 @@ type ArticleInfo struct {
 	AudioDownloadURL string
 }
 
+// PlayAuthInfo ...
+type PlayAuthInfo struct {
+	PlayAuth string
+	VideoID  string
+}
+
 // ColumnResponse ...
 type ColumnResponse struct {
 	Code int `json:"code"`
@@ -76,6 +94,53 @@ type ColumnResponse struct {
 		ArticleContent   string `json:"article_content"`
 		AudioDownloadURL string `json:"audio_download_url"`
 	} `json:"data"`
+}
+
+// PlayAuthResponse ...
+type PlayAuthResponse struct {
+	Code int `json:"code"`
+	Data struct {
+		PlayAuth string `json:"play_auth"`
+		VID      string `json:"vid"`
+	} `json:"data"`
+}
+
+// MyClassInfoResponse ...
+type MyClassInfoResponse struct {
+	Code int `json:"code"`
+	Data struct {
+		ClassType int    `json:"class_type"`
+		Title     string `json:"title"`
+		Lessons   []struct {
+			ChapterName string `json:"chapter_name"`
+			BeginTime   int    `json:"begin_time"`
+			ChapterID   int    `json:"chapter_id"`
+			IndexNo     int    `json:"index_no"`
+			Articles    []struct {
+				ArticleID    int    `json:"article_id"`
+				ArticleTitle string `json:"article_title"`
+				IndexNo      int    `json:"index_no"`
+				IsRead       bool   `json:"is_read"`
+				IsFinish     bool   `json:"is_finish"`
+				// HasNotes         bool          `json:"has_notes"`
+				// IsRequired       int           `json:"is_required"`
+				VideoTime int `json:"video_time"`
+				// LearnTime        int           `json:"learn_time"`
+				// LearnStatus      int           `json:"learn_status"`
+				// MaxOffset        int           `json:"max_offset"`
+				// ArticleMaxOffset int           `json:"article_max_offset"`
+				// VideoMaxOffset   int           `json:"video_max_offset"`
+				// ArticleLen       int           `json:"article_len"`
+				// VideoLen         int           `json:"video_len"`
+				// Ctime            int           `json:"ctime"`
+				// Exercises        []interface{} `json:"exercises"`
+			} `json:"articles"`
+		} `json:"lessons"`
+	} `json:"data"`
+	Error struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
+	} `json:"error"`
 }
 
 // VideoResponse ...
@@ -123,6 +188,14 @@ func InitClient(cookies []*http.Cookie) {
 		SetTimeout(10*time.Second).
 		SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
 		SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
+		SetLogger(logger.DiscardLogger{})
+
+	ugeekTimeClient = resty.New().
+		SetBaseURL(pgt.GeekBangUniversity).
+		SetCookies(cookies).
+		SetTimeout(10*time.Second).
+		SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
+		SetHeader(pgt.OriginHeaderName, pgt.GeekBangUniversity).
 		SetLogger(logger.DiscardLogger{})
 
 	SiteCookies = cookies
@@ -326,4 +399,76 @@ func Auth() error {
 	}
 	// status code 452
 	return pgt.ErrAuthFailed
+}
+
+// GetMyClassProduct ...
+func GetMyClassProduct(classID int) (Product, error) {
+	var p Product
+	var resp MyClassInfoResponse
+	_, err := ugeekTimeClient.R().SetBody(
+		map[string]interface{}{
+			"class_id": classID,
+		}).
+		SetResult(&resp).
+		Post(MyClassInfoV1Path)
+
+	if err != nil {
+		return p, err
+	}
+
+	if resp.Code != 0 {
+		if resp.Error.Code == -5001 {
+			p.Access = false
+			return p, nil
+		}
+		return p, ErrGeekTimeAPIBadCode{PlayAuthV1Path, resp.Code, ""}
+	}
+
+	p = Product{
+		Access: true,
+		ID:     classID,
+		Title:  resp.Data.Title,
+		Type:   ProductTypeUniversityVideo,
+	}
+	var articles []Article
+	for _, lesson := range resp.Data.Lessons {
+		for _, article := range lesson.Articles {
+			// ONLY download university video lessons
+			if article.VideoTime > 0 {
+				articles = append(articles, Article{
+					AID:   article.ArticleID,
+					Title: article.ArticleTitle,
+				})
+			}
+		}
+	}
+	p.Articles = articles
+
+	return p, nil
+}
+
+// GetPlayAuth ...
+func GetPlayAuth(articleID, classID int) (PlayAuthInfo, error) {
+	var info PlayAuthInfo
+	var result PlayAuthResponse
+	_, err := ugeekTimeClient.R().SetBody(
+		map[string]interface{}{
+			"article_id": articleID,
+			"class_id":   classID,
+		}).
+		SetResult(&result).
+		Post(PlayAuthV1Path)
+
+	if err != nil {
+		return info, err
+	}
+
+	if result.Code != 0 {
+		return info, ErrGeekTimeAPIBadCode{PlayAuthV1Path, result.Code, ""}
+	}
+
+	return PlayAuthInfo{
+		PlayAuth: result.Data.PlayAuth,
+		VideoID:  result.Data.VID,
+	}, nil
 }

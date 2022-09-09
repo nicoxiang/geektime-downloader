@@ -40,6 +40,7 @@ var (
 	currentProduct   geektime.Product
 	quality          string
 	downloadComments bool
+	university       bool
 	columnOutputType int
 )
 
@@ -54,6 +55,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "专栏和视频课的下载目标位置")
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
+	rootCmd.Flags().BoolVar(&university, "university", false, "是否下载训练营的内容")
 	rootCmd.Flags().IntVar(&columnOutputType, "output", 1, "专栏的输出内容(1pdf,2markdown,4audio)可自由组合")
 
 	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcid")
@@ -155,7 +157,11 @@ func productOps(ctx context.Context) {
 		options[1] = option{"下载当前专栏所有文章", 1}
 		options[2] = option{"选择文章", 2}
 	} else if isVideo() {
-		options[1] = option{"下载当前视频课所有视频", 1}
+		s1 := "下载当前视频课所有视频"
+		if currentProduct.Type == geektime.ProductTypeUniversityVideo {
+			s1 = "下载当前训练营所有视频"
+		}
+		options[1] = option{s1, 1}
 		options[2] = option{"选择视频", 2}
 	}
 	templates := &promptui.SelectTemplates{
@@ -302,7 +308,7 @@ func handleDownloadAll(ctx context.Context) {
 			}
 
 			checkError(err)
-	
+
 			increasePDFCount(total, &i)
 			r := rand.Intn(2000)
 			time.Sleep(time.Duration(r) * time.Millisecond)
@@ -313,10 +319,15 @@ func handleDownloadAll(ctx context.Context) {
 			if _, ok := downloaded[fileName]; ok {
 				continue
 			}
-			videoInfo, err := geektime.GetVideoInfo(a.AID, quality)
-			checkError(err)
-			err = video.DownloadVideo(ctx, videoInfo.M3U8URL, a.Title, projectDir, int64(videoInfo.Size), concurrency)
-			checkError(err)
+			if currentProduct.Type == geektime.ProductTypeNormalVideo {
+				videoInfo, err := geektime.GetVideoInfo(a.AID, quality)
+				checkError(err)
+				err = video.DownloadHLSStandardEncryptVideo(ctx, videoInfo.M3U8URL, a.Title, projectDir, int64(videoInfo.Size), concurrency)
+				checkError(err)
+			} else if currentProduct.Type == geektime.ProductTypeUniversityVideo {
+				err = video.DownloadAliyunVodEncryptVideo(ctx, a.AID, currentProduct, projectDir, quality, concurrency)
+				checkError(err)
+			}
 		}
 	}
 	selectProduct(ctx)
@@ -341,7 +352,14 @@ func loadArticles() {
 func loadProduct(ctx context.Context, productID int) {
 	sp.Prefix = "[ 正在加载课程信息... ]"
 	sp.Start()
-	p, err := geektime.GetColumnInfo(productID)
+	var p geektime.Product
+	var err error
+	if university {
+		p, err = geektime.GetMyClassProduct(productID)
+	} else {
+		p, err = geektime.GetColumnInfo(productID)
+	}
+
 	if err != nil {
 		sp.Stop()
 		checkError(err)
@@ -402,19 +420,24 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 
 		sp.Stop()
 	} else if isVideo() {
-		videoInfo, err := geektime.GetVideoInfo(article.AID, quality)
-		checkError(err)
-		err = video.DownloadVideo(ctx, videoInfo.M3U8URL, article.Title, projectDir, int64(videoInfo.Size), concurrency)
-		checkError(err)
+		if currentProduct.Type == geektime.ProductTypeNormalVideo {
+			videoInfo, err := geektime.GetVideoInfo(article.AID, quality)
+			checkError(err)
+			err = video.DownloadHLSStandardEncryptVideo(ctx, videoInfo.M3U8URL, article.Title, projectDir, int64(videoInfo.Size), concurrency)
+			checkError(err)
+		} else if currentProduct.Type == geektime.ProductTypeUniversityVideo {
+			err := video.DownloadAliyunVodEncryptVideo(ctx, article.AID, currentProduct, projectDir, quality, concurrency)
+			checkError(err)
+		}
 	}
 }
 
 func isColumn() bool {
-	return currentProduct.Type == "c1"
+	return currentProduct.Type == geektime.ProductTypeColumn
 }
 
 func isVideo() bool {
-	return currentProduct.Type == "c3"
+	return currentProduct.Type == geektime.ProductTypeNormalVideo || currentProduct.Type == geektime.ProductTypeUniversityVideo
 }
 
 // Sets the bit at pos in the integer n.

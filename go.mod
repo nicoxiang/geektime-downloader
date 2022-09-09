@@ -10,6 +10,7 @@ require (
 	github.com/chromedp/chromedp v0.8.5
 	github.com/chzyer/readline v0.0.0-20180603132655-2972be24d48e
 	github.com/go-resty/resty/v2 v2.7.0
+	github.com/google/uuid v1.3.0
 	github.com/spf13/cobra v1.5.0
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 )
