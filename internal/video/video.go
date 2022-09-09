@@ -181,17 +181,28 @@ func writeToTempVideoFile(ctx context.Context,
 	bar *pb.ProgressBar,
 	tsURLPrefix string) (err error) {
 	for tsFileName := range tsFileNames {
-		resp, err := downloadClient.R().
-			SetContext(ctx).
-			SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
-			SetOutput(tsFileName).
-			Get(tsURLPrefix + tsFileName)
+
+		// fix error: http2: server sent GOAWAY and closed the connection; LastStreamID=1999
+		// resty retry not work, because error comes from io read, not request
+		err := retry(5, 700*time.Millisecond, func() error {
+			resp, err := downloadClient.R().
+				SetContext(ctx).
+				SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
+				SetOutput(tsFileName).
+				Get(tsURLPrefix + tsFileName)
+			if err != nil {
+				return err
+			}
+			addBarValue(bar, resp.Size())
+			return nil
+		})
+
 		if err != nil {
 			for range tsFileNames {
 			}
 			return err
 		}
-		addBarValue(bar, resp.Size())
+
 	}
 	return nil
 }
@@ -288,4 +299,18 @@ func getPlayInfo(playInfoURL, quality string) (vod.PlayInfo, error) {
 		}
 	}
 	return playInfo, nil
+}
+
+func retry(attempts int, sleep time.Duration, f func() error) (err error) {
+	for i := 0; i < attempts; i++ {
+		if i > 0 {
+			time.Sleep(sleep)
+			sleep *= 2
+		}
+		err = f()
+		if err == nil || errors.Is(err, context.Canceled) {
+			return err
+		}
+	}
+	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
