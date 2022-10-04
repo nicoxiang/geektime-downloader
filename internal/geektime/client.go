@@ -9,21 +9,29 @@ import (
 	"github.com/go-resty/resty/v2"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
+	"github.com/nicoxiang/geektime-downloader/internal/geektime/response"
 )
 
 const (
-	// ProductPath ...
-	ProductPath = "/serv/v3/learn/product"
+	
 	// ArticlesPath ...
 	ArticlesPath = "/serv/v1/column/articles"
 	// ArticleV1Path ...
 	ArticleV1Path = "/serv/v1/article"
-	// ColumnInfoV3Path ...
-	ColumnInfoV3Path = "/serv/v3/column/info"
 	// PlayAuthV1Path ...
 	PlayAuthV1Path = "/serv/v1/video/play-auth"
 	// MyClassInfoV1Path ...
 	MyClassInfoV1Path = "/serv/v1/myclass/info"
+
+
+	// V3ColumnInfoPath ...
+	V3ColumnInfoPath = "/serv/v3/column/info"
+	// V3ProductInfoPath ...
+	V3ProductInfoPath = "/serv/v3/product/info"
+	// V3ArticleInfoPath ...
+	V3ArticleInfoPath = "serv/v3/article/info"
+	// V3VideoPlayAuthPath ...
+	V3VideoPlayAuthPath = "serv/v3/source_auth/video_play_auth"
 
 	// ProductTypeColumn c1 column
 	ProductTypeColumn = "c1"
@@ -227,7 +235,7 @@ func GetColumnInfo(productID int) (Product, error) {
 				"with_recommend_article": true,
 			}).
 		SetResult(&result).
-		Post(ColumnInfoV3Path)
+		Post(V3ColumnInfoPath)
 
 	if err != nil {
 		return p, err
@@ -247,7 +255,7 @@ func GetColumnInfo(productID int) (Product, error) {
 		return p, nil
 	}
 
-	return p, ErrGeekTimeAPIBadCode{ColumnInfoV3Path, result.Code, ""}
+	return p, ErrGeekTimeAPIBadCode{V3ColumnInfoPath, result.Code, ""}
 }
 
 // GetArticles call geektime api to get article list
@@ -317,6 +325,7 @@ func GetColumnArticleInfo(articleID int) (ArticleInfo, error) {
 }
 
 // GetVideoInfo ...
+// Deprecated: old geektime api
 func GetVideoInfo(articleID int, quality string) (VideoInfo, error) {
 	var v VideoInfo
 	a, err := GetArticleResponse[VideoResponse](articleID)
@@ -471,4 +480,98 @@ func GetPlayAuth(articleID, classID int) (PlayAuthInfo, error) {
 		PlayAuth: result.Data.PlayAuth,
 		VideoID:  result.Data.VID,
 	}, nil
+}
+
+// PostV3ProductInfo only used to get daily lesson product info temporarily
+func PostV3ProductInfo(productID int) (response.V3ProductInfoResponse, error) {
+	var result response.V3ProductInfoResponse
+	if err := Auth(); err != nil {
+		return result, err
+	}
+	resp, err := geekTimeClient.R().
+		SetBody(
+			map[string]interface{}{
+				"id":	productID,
+			}).
+		SetResult(&result).
+		Post(V3ProductInfoPath)
+
+	if err != nil {
+		return result, err
+	}
+
+	if resp.RawResponse.StatusCode == 451 {
+		return result, pgt.ErrGeekTimeRateLimit
+	}
+
+	if result.Code == 0 {
+		return result, nil
+	}
+
+	return result, ErrGeekTimeAPIBadCode{V3ProductInfoPath, result.Code, ""}
+}
+
+// PostV3ArticleInfo only used to get daily lesson article info temporarily
+func PostV3ArticleInfo(articleID int) (response.V3ArticleInfoResponse, error) {
+	var result response.V3ArticleInfoResponse
+	if err := Auth(); err != nil {
+		return result, err
+	}
+	resp, err := geekTimeClient.R().
+		SetBody(
+			map[string]interface{}{
+				"id":	articleID,
+			}).
+		SetResult(&result).
+		Post(V3ArticleInfoPath)
+
+	if err != nil {
+		return result, err
+	}
+
+	if resp.RawResponse.StatusCode == 451 {
+		return result, pgt.ErrGeekTimeRateLimit
+	}
+
+	if result.Code == 0 {
+		return result, nil
+	}
+
+	return result, ErrGeekTimeAPIBadCode{V3ArticleInfoPath, result.Code, ""}
+}
+
+// PostV3VideoPlayAuth get play auth string
+func PostV3VideoPlayAuth(articleID, sourceType int, videoID string) (string, error) {
+	var result struct {
+		Code int `json:"code"`
+		Data struct {
+			PlayAuth string `json:"play_auth"`
+		} `json:"data"`
+	}
+	if err := Auth(); err != nil {
+		return "", err
+	}
+	resp, err := geekTimeClient.R().
+		SetBody(
+			map[string]interface{}{
+				"aid":	articleID,
+				"source_type":	sourceType,
+				"video_id": videoID,
+			}).
+		SetResult(&result).
+		Post(V3VideoPlayAuthPath)
+
+	if err != nil {
+		return "", err
+	}
+
+	if resp.RawResponse.StatusCode == 451 {
+		return "", pgt.ErrGeekTimeRateLimit
+	}
+
+	if result.Code == 0 {
+		return result.Data.PlayAuth, nil
+	}
+
+	return "", ErrGeekTimeAPIBadCode{V3VideoPlayAuthPath, result.Code, ""}
 }

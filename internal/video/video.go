@@ -67,19 +67,87 @@ type GetPlayInfoResponse struct {
 	PlayInfoList vod.PlayInfoListInGetPlayInfo `json:"PlayInfoList" xml:"PlayInfoList"`
 }
 
-// DownloadAliyunVodEncryptVideo ...
-func DownloadAliyunVodEncryptVideo(ctx context.Context,
+// DownloadProductVideo download different type video via product id, such as daily lesson, qconplus ...
+// sourceType: dialy lesson 2, qconplus 4
+func DownloadProductVideo(ctx context.Context,
+	productID int,
+	sourceType int,
+	projectDir string,
+	quality string,
+	concurrency int,
+) error {
+	productInfo, err := geektime.PostV3ProductInfo(productID)
+	if err != nil {
+		return err
+	}
+	return DownloadArticleVideo(ctx,
+		productInfo.Data.Info.Article.ID,
+		sourceType,
+		projectDir,
+		quality,
+		concurrency)
+}
+
+// DownloadArticleVideo download normal video cource ...
+// sourceType: normal video cource 1
+func DownloadArticleVideo(ctx context.Context,
+	articleID int,
+	sourceType int,
+	projectDir string,
+	quality string,
+	concurrency int,
+) error {
+
+	articleInfo, err := geektime.PostV3ArticleInfo(articleID)
+	if err != nil {
+		return err
+	}
+	playAuth, err := geektime.PostV3VideoPlayAuth(articleInfo.Data.Info.ID, sourceType, articleInfo.Data.Info.Video.ID)
+	if err != nil {
+		return err
+	}
+	return downloadAliyunVodEncryptVideo(ctx,
+		playAuth,
+		articleInfo.Data.Info.Title,
+		projectDir,
+		quality,
+		articleInfo.Data.Info.Video.ID,
+		concurrency)
+}
+
+// DownloadUniversityVideo ...
+func DownloadUniversityVideo(ctx context.Context,
 	articleID int,
 	currentProduct geektime.Product,
 	projectDir string,
 	quality string,
 	concurrency int) error {
+
 	playAuthInfo, err := geektime.GetPlayAuth(articleID, currentProduct.ID)
 	if err != nil {
 		return err
 	}
+
+	videoTitle := getUniversityVideoTitle(articleID, currentProduct)
+	return downloadAliyunVodEncryptVideo(ctx,
+		playAuthInfo.PlayAuth,
+		videoTitle,
+		projectDir,
+		quality,
+		playAuthInfo.VideoID,
+		concurrency)
+}
+
+func downloadAliyunVodEncryptVideo(ctx context.Context,
+	playAuth,
+	videoTitle,
+	projectDir,
+	quality,
+	videoID string,
+	concurrency int) error {
+
 	clientRand := uuid.NewString()
-	playInfoURL, err := vod.BuildVodGetPlayInfoURL(playAuthInfo.PlayAuth, playAuthInfo.VideoID, clientRand)
+	playInfoURL, err := vod.BuildVodGetPlayInfoURL(playAuth, videoID, clientRand)
 	if err != nil {
 		return err
 	}
@@ -94,8 +162,7 @@ func DownloadAliyunVodEncryptVideo(ctx context.Context,
 		return err
 	}
 	decryptKey := crypto.GetAESDecryptKey(clientRand, playInfo.Rand, playInfo.Plaintext)
-	title := getUniversityVideoTitle(articleID, currentProduct)
-	return download(ctx, tsURLPrefix, title, projectDir, tsFileNames, []byte(decryptKey), playInfo.Size, AliyunVodEncrypt, concurrency)
+	return download(ctx, tsURLPrefix, videoTitle, projectDir, tsFileNames, []byte(decryptKey), playInfo.Size, AliyunVodEncrypt, concurrency)
 }
 
 // DownloadHLSStandardEncryptVideo ...

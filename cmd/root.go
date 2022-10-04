@@ -40,9 +40,14 @@ var (
 	currentProduct   geektime.Product
 	quality          string
 	downloadComments bool
-	university       bool
+	sourceType      int
 	columnOutputType int
 )
+
+type selectOption struct {
+	Text  string
+	Value int
+}
 
 func init() {
 	userHomeDir, _ := os.UserHomeDir()
@@ -55,7 +60,6 @@ func init() {
 	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "专栏和视频课的下载目标位置")
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
-	rootCmd.Flags().BoolVar(&university, "university", false, "是否下载训练营的内容")
 	rootCmd.Flags().IntVar(&columnOutputType, "output", 1, "专栏的输出内容(1pdf,2markdown,4audio)可自由组合")
 
 	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcid")
@@ -118,8 +122,34 @@ var rootCmd = &cobra.Command{
 			checkError(pgt.ErrAuthFailed)
 		}
 
-		selectProduct(cmd.Context())
+		selectProductType(cmd.Context())
 	},
+}
+
+func selectProductType(ctx context.Context) {
+	options := make([]selectOption, 4)
+	options[0] = selectOption{"普通课程", 1}
+	options[1] = selectOption{"每日一课", 2}
+	options[2] = selectOption{"大厂案例", 4}
+	options[3] = selectOption{"训练营", 5}
+
+	templates := &promptui.SelectTemplates{
+		Label:    "{{ . }}",
+		Active:   "{{ `>` | red }} {{ .Text | red }}",
+		Inactive: "{{ .Text }}",
+	}
+	prompt := promptui.Select{
+		Label:        fmt.Sprintf("请选择想要下载的产品类型"),
+		Items:        options,
+		Templates:    templates,
+		Size:         len(options),
+		HideSelected: true,
+		Stdout:       NoBellStdout,
+	}
+	index, _, err := prompt.Run()
+	checkError(err)
+	sourceType = index
+	selectProduct(ctx)
 }
 
 func selectProduct(ctx context.Context) {
@@ -141,28 +171,62 @@ func selectProduct(ctx context.Context) {
 
 	// ignore, because checked before
 	id, _ := strconv.Atoi(s)
-	loadProduct(ctx, id)
 
-	productOps(ctx)
+	if sourceType == 1 || sourceType == 5 {
+		// when source type is normal cource or university cource
+		// choose download all or download specified article
+		loadProduct(ctx, id)
+		productOps(ctx)
+	} else {
+		// when source type is daily lesson or qconplus,
+		// input id means product id
+		// download video directly
+		projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, currentProduct.Title)
+		checkError(err)
+		err = video.DownloadProductVideo(ctx, id, sourceType, projectDir, quality, concurrency)
+		checkError(err)
+
+		// TODO: goto where ?
+		selectProduct(ctx)
+	}
+}
+
+func loadProduct(ctx context.Context, productID int) {
+	sp.Prefix = "[ 正在加载课程信息... ]"
+	sp.Start()
+	var p geektime.Product
+	var err error
+	if sourceType == 5 {
+		p, err = geektime.GetMyClassProduct(productID)
+	} else if sourceType == 1 {
+		p, err = geektime.GetColumnInfo(productID)
+	}
+
+	if err != nil {
+		sp.Stop()
+		checkError(err)
+	}
+	sp.Stop()
+	if !p.Access {
+		fmt.Fprint(os.Stderr, "尚未购买该课程\n")
+		selectProduct(ctx)
+	}
+	currentProduct = p
 }
 
 func productOps(ctx context.Context) {
-	type option struct {
-		Text  string
-		Value int
-	}
-	options := make([]option, 3)
-	options[0] = option{"返回上一级", 0}
+	options := make([]selectOption, 3)
+	options[0] = selectOption{"返回上一级", 0}
 	if isColumn() {
-		options[1] = option{"下载当前专栏所有文章", 1}
-		options[2] = option{"选择文章", 2}
+		options[1] = selectOption{"下载当前专栏所有文章", 1}
+		options[2] = selectOption{"选择文章", 2}
 	} else if isVideo() {
 		s1 := "下载当前视频课所有视频"
 		if currentProduct.Type == geektime.ProductTypeUniversityVideo {
 			s1 = "下载当前训练营所有视频"
 		}
-		options[1] = option{s1, 1}
-		options[2] = option{"选择视频", 2}
+		options[1] = selectOption{s1, 1}
+		options[2] = selectOption{"选择视频", 2}
 	}
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
@@ -319,13 +383,11 @@ func handleDownloadAll(ctx context.Context) {
 			if _, ok := downloaded[fileName]; ok {
 				continue
 			}
-			if currentProduct.Type == geektime.ProductTypeNormalVideo {
-				videoInfo, err := geektime.GetVideoInfo(a.AID, quality)
+			if sourceType == 1 {
+				err := video.DownloadArticleVideo(ctx, a.AID, sourceType, projectDir, quality, concurrency)
 				checkError(err)
-				err = video.DownloadHLSStandardEncryptVideo(ctx, videoInfo.M3U8URL, a.Title, projectDir, int64(videoInfo.Size), concurrency)
-				checkError(err)
-			} else if currentProduct.Type == geektime.ProductTypeUniversityVideo {
-				err = video.DownloadAliyunVodEncryptVideo(ctx, a.AID, currentProduct, projectDir, quality, concurrency)
+			}else if sourceType == 5 {
+				err := video.DownloadUniversityVideo(ctx, a.AID, currentProduct, projectDir, quality, concurrency)
 				checkError(err)
 			}
 		}
@@ -347,29 +409,6 @@ func loadArticles() {
 		currentProduct.Articles = articles
 		sp.Stop()
 	}
-}
-
-func loadProduct(ctx context.Context, productID int) {
-	sp.Prefix = "[ 正在加载课程信息... ]"
-	sp.Start()
-	var p geektime.Product
-	var err error
-	if university {
-		p, err = geektime.GetMyClassProduct(productID)
-	} else {
-		p, err = geektime.GetColumnInfo(productID)
-	}
-
-	if err != nil {
-		sp.Stop()
-		checkError(err)
-	}
-	sp.Stop()
-	if !p.Access {
-		fmt.Fprint(os.Stderr, "尚未购买该课程\n")
-		selectProduct(ctx)
-	}
-	currentProduct = p
 }
 
 func downloadArticle(ctx context.Context, article geektime.Article, projectDir string) {
@@ -420,13 +459,11 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 
 		sp.Stop()
 	} else if isVideo() {
-		if currentProduct.Type == geektime.ProductTypeNormalVideo {
-			videoInfo, err := geektime.GetVideoInfo(article.AID, quality)
+		if sourceType == 1 {
+			err := video.DownloadArticleVideo(ctx, article.AID, sourceType, projectDir, quality, concurrency)
 			checkError(err)
-			err = video.DownloadHLSStandardEncryptVideo(ctx, videoInfo.M3U8URL, article.Title, projectDir, int64(videoInfo.Size), concurrency)
-			checkError(err)
-		} else if currentProduct.Type == geektime.ProductTypeUniversityVideo {
-			err := video.DownloadAliyunVodEncryptVideo(ctx, article.AID, currentProduct, projectDir, quality, concurrency)
+		}else if sourceType == 5 {
+			err := video.DownloadUniversityVideo(ctx, article.AID, currentProduct, projectDir, quality, concurrency)
 			checkError(err)
 		}
 	}
