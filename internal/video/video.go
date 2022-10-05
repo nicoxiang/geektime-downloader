@@ -123,18 +123,18 @@ func DownloadUniversityVideo(ctx context.Context,
 	quality string,
 	concurrency int) error {
 
-	playAuthInfo, err := geektime.GetPlayAuth(articleID, currentProduct.ID)
+	playAuthInfo, err := geektime.PostV1VideoPlayAuth(articleID, currentProduct.ID)
 	if err != nil {
 		return err
 	}
 
 	videoTitle := getUniversityVideoTitle(articleID, currentProduct)
 	return downloadAliyunVodEncryptVideo(ctx,
-		playAuthInfo.PlayAuth,
+		playAuthInfo.Data.PlayAuth,
 		videoTitle,
 		projectDir,
 		quality,
-		playAuthInfo.VideoID,
+		playAuthInfo.Data.VID,
 		concurrency)
 }
 

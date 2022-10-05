@@ -7,30 +7,29 @@ import (
 	"time"
 
 	"github.com/go-resty/resty/v2"
+	"github.com/nicoxiang/geektime-downloader/internal/geektime/response"
 	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
-	"github.com/nicoxiang/geektime-downloader/internal/geektime/response"
 )
 
 const (
-	
-	// ArticlesPath ...
-	ArticlesPath = "/serv/v1/column/articles"
-	// ArticleV1Path ...
-	ArticleV1Path = "/serv/v1/article"
-	// PlayAuthV1Path ...
-	PlayAuthV1Path = "/serv/v1/video/play-auth"
-	// MyClassInfoV1Path ...
-	MyClassInfoV1Path = "/serv/v1/myclass/info"
 
+	// V1ColumnArticlesPath get all articles summary info in one column
+	V1ColumnArticlesPath = "/serv/v1/column/articles"
+	// V1ArticlePath used in normal column
+	V1ArticlePath = "/serv/v1/article"
+	// V1VideoPlayAuthPath used in university video play auth
+	V1VideoPlayAuthPath = "/serv/v1/video/play-auth"
+	// V1MyClassInfoPath get university class info and all articles info in it
+	V1MyClassInfoPath = "/serv/v1/myclass/info"
 
-	// V3ColumnInfoPath ...
+	// V3ColumnInfoPath used in get normal column/video info
 	V3ColumnInfoPath = "/serv/v3/column/info"
-	// V3ProductInfoPath ...
+	// V3ProductInfoPath used in get daily lesson, qconplus product info
 	V3ProductInfoPath = "/serv/v3/product/info"
-	// V3ArticleInfoPath ...
+	// V3ArticleInfoPath used in normal video, daily lesson, qconplus 
 	V3ArticleInfoPath = "serv/v3/article/info"
-	// V3VideoPlayAuthPath ...
+	// V3VideoPlayAuthPath used in normal video, daily lesson, qconplus video play auth
 	V3VideoPlayAuthPath = "serv/v3/source_auth/video_play_auth"
 
 	// ProductTypeColumn c1 column
@@ -76,107 +75,10 @@ type Article struct {
 	Title string
 }
 
-// VideoInfo ...
-type VideoInfo struct {
-	M3U8URL string
-	Size    int
-}
-
 // ArticleInfo ...
 type ArticleInfo struct {
 	ArticleContent   string
 	AudioDownloadURL string
-}
-
-// PlayAuthInfo ...
-type PlayAuthInfo struct {
-	PlayAuth string
-	VideoID  string
-}
-
-// ColumnResponse ...
-type ColumnResponse struct {
-	Code int `json:"code"`
-	Data struct {
-		ArticleTitle     string `json:"article_title"`
-		ArticleContent   string `json:"article_content"`
-		AudioDownloadURL string `json:"audio_download_url"`
-	} `json:"data"`
-}
-
-// PlayAuthResponse ...
-type PlayAuthResponse struct {
-	Code int `json:"code"`
-	Data struct {
-		PlayAuth string `json:"play_auth"`
-		VID      string `json:"vid"`
-	} `json:"data"`
-}
-
-// MyClassInfoResponse ...
-type MyClassInfoResponse struct {
-	Code int `json:"code"`
-	Data struct {
-		ClassType int    `json:"class_type"`
-		Title     string `json:"title"`
-		Lessons   []struct {
-			ChapterName string `json:"chapter_name"`
-			BeginTime   int    `json:"begin_time"`
-			ChapterID   int    `json:"chapter_id"`
-			IndexNo     int    `json:"index_no"`
-			Articles    []struct {
-				ArticleID    int    `json:"article_id"`
-				ArticleTitle string `json:"article_title"`
-				IndexNo      int    `json:"index_no"`
-				IsRead       bool   `json:"is_read"`
-				IsFinish     bool   `json:"is_finish"`
-				// HasNotes         bool          `json:"has_notes"`
-				// IsRequired       int           `json:"is_required"`
-				VideoTime int `json:"video_time"`
-				// LearnTime        int           `json:"learn_time"`
-				// LearnStatus      int           `json:"learn_status"`
-				// MaxOffset        int           `json:"max_offset"`
-				// ArticleMaxOffset int           `json:"article_max_offset"`
-				// VideoMaxOffset   int           `json:"video_max_offset"`
-				// ArticleLen       int           `json:"article_len"`
-				// VideoLen         int           `json:"video_len"`
-				// Ctime            int           `json:"ctime"`
-				// Exercises        []interface{} `json:"exercises"`
-			} `json:"articles"`
-		} `json:"lessons"`
-	} `json:"data"`
-	Error struct {
-		Code int    `json:"code"`
-		Msg  string `json:"msg"`
-	} `json:"error"`
-}
-
-// VideoResponse ...
-type VideoResponse struct {
-	Code int `json:"code"`
-	Data struct {
-		ArticleTitle string `json:"article_title"`
-		HLSVideos    struct {
-			SD struct {
-				Size int    `json:"size"`
-				URL  string `json:"url"`
-			} `json:"sd"`
-			HD struct {
-				Size int    `json:"size"`
-				URL  string `json:"url"`
-			} `json:"hd"`
-			LD struct {
-				Size int    `json:"size"`
-				URL  string `json:"url"`
-			} `json:"ld"`
-		} `json:"hls_videos"`
-	} `json:"data"`
-}
-
-// ArticleResponse type constraint, column and video response are different,
-// hls_videos field in video response is struct, but in column response its slice
-type ArticleResponse interface {
-	ColumnResponse | VideoResponse
 }
 
 // InitClient init golbal clients with cookies
@@ -209,25 +111,13 @@ func InitClient(cookies []*http.Cookie) {
 	SiteCookies = cookies
 }
 
-// GetColumnInfo  ..
-func GetColumnInfo(productID int) (Product, error) {
+// PostV3ColumnInfo  ..
+func PostV3ColumnInfo(productID int) (Product, error) {
 	var p Product
 	if err := Auth(); err != nil {
 		return p, err
 	}
-	var result struct {
-		Code int `json:"code"`
-		Data struct {
-			ID    int    `json:"id"`
-			Type  string `json:"type"`
-			Title string `json:"title"`
-			Extra struct {
-				Sub struct {
-					AccessMask int `json:"access_mask"`
-				} `json:"sub"`
-			} `json:"extra"`
-		} `json:"data"`
-	}
+	var result response.V3ColumnInfoResponse
 	resp, err := geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
@@ -258,21 +148,13 @@ func GetColumnInfo(productID int) (Product, error) {
 	return p, ErrGeekTimeAPIBadCode{V3ColumnInfoPath, result.Code, ""}
 }
 
-// GetArticles call geektime api to get article list
-func GetArticles(cid string) ([]Article, error) {
+// PostV1ColumnArticles call geektime api to get article list
+func PostV1ColumnArticles(cid string) ([]Article, error) {
 	if err := Auth(); err != nil {
 		return nil, err
 	}
 
-	var result struct {
-		Code int `json:"code"`
-		Data struct {
-			List []struct {
-				ID           int    `json:"id"`
-				ArticleTitle string `json:"article_title"`
-			} `json:"list"`
-		} `json:"data"`
-	}
+	var result response.V1ColumnArticlesResponse
 	resp, err := geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
@@ -280,10 +162,10 @@ func GetArticles(cid string) ([]Article, error) {
 				"order":  "earliest",
 				"prev":   0,
 				"sample": false,
-				"size":   500,
+				"size":   500, //get all articles
 			}).
 		SetResult(&result).
-		Post(ArticlesPath)
+		Post(V1ColumnArticlesPath)
 
 	if err != nil {
 		return nil, err
@@ -304,61 +186,15 @@ func GetArticles(cid string) ([]Article, error) {
 		return articles, nil
 	}
 
-	return nil, ErrGeekTimeAPIBadCode{ArticlesPath, result.Code, ""}
+	return nil, ErrGeekTimeAPIBadCode{V1ColumnArticlesPath, result.Code, ""}
 }
 
-// GetColumnArticleInfo ...
-func GetColumnArticleInfo(articleID int) (ArticleInfo, error) {
-	var a ArticleInfo
-	ar, err := GetArticleResponse[ColumnResponse](articleID)
-	if err != nil {
-		return a, err
-	}
-	if ar.Code != 0 {
-		return a, ErrGeekTimeAPIBadCode{ArticleV1Path, ar.Code, ""}
-	}
-
-	return ArticleInfo{
-		ar.Data.ArticleContent,
-		ar.Data.AudioDownloadURL,
-	}, err
-}
-
-// GetVideoInfo ...
-// Deprecated: old geektime api
-func GetVideoInfo(articleID int, quality string) (VideoInfo, error) {
-	var v VideoInfo
-	a, err := GetArticleResponse[VideoResponse](articleID)
-	if err != nil {
-		return v, err
-	}
-	if a.Code != 0 {
-		return v, ErrGeekTimeAPIBadCode{ArticleV1Path, a.Code, ""}
-	}
-	if quality == "sd" {
-		v = VideoInfo{
-			M3U8URL: a.Data.HLSVideos.SD.URL,
-			Size:    a.Data.HLSVideos.SD.Size,
-		}
-	} else if quality == "hd" {
-		v = VideoInfo{
-			M3U8URL: a.Data.HLSVideos.HD.URL,
-			Size:    a.Data.HLSVideos.HD.Size,
-		}
-	} else if quality == "ld" {
-		v = VideoInfo{
-			M3U8URL: a.Data.HLSVideos.LD.URL,
-			Size:    a.Data.HLSVideos.LD.Size,
-		}
-	}
-	return v, nil
-}
-
-// GetArticleResponse get column or video response
-func GetArticleResponse[R ArticleResponse](articleID int) (R, error) {
-	var result R
+// GetArticleInfo ...
+func GetArticleInfo(articleID int) (ArticleInfo, error) {
+	var result response.V1ArticleResponse
+	var articleInfo ArticleInfo
 	if err := Auth(); err != nil {
-		return result, err
+		return articleInfo, err
 	}
 
 	resp, err := geekTimeClient.R().
@@ -370,17 +206,24 @@ func GetArticleResponse[R ArticleResponse](articleID int) (R, error) {
 				"reverse":           false,
 			}).
 		SetResult(&result).
-		Post(ArticleV1Path)
+		Post(V1ArticlePath)
 
 	if err != nil {
-		return result, err
+		return articleInfo, err
 	}
 
 	if resp.RawResponse.StatusCode == 451 {
-		return result, pgt.ErrGeekTimeRateLimit
+		return articleInfo, pgt.ErrGeekTimeRateLimit
 	}
 
-	return result, nil
+	if result.Code == 0 {
+		return ArticleInfo{
+			result.Data.ArticleContent,
+			result.Data.AudioDownloadURL,
+		}, nil
+	}
+
+	return articleInfo, ErrGeekTimeAPIBadCode{V3VideoPlayAuthPath, result.Code, ""}
 }
 
 // Auth check if current user login is expired or login in another device
@@ -413,13 +256,13 @@ func Auth() error {
 // GetMyClassProduct ...
 func GetMyClassProduct(classID int) (Product, error) {
 	var p Product
-	var resp MyClassInfoResponse
+	var resp response.V1MyClassInfoResponse
 	_, err := ugeekTimeClient.R().SetBody(
 		map[string]interface{}{
 			"class_id": classID,
 		}).
 		SetResult(&resp).
-		Post(MyClassInfoV1Path)
+		Post(V1MyClassInfoPath)
 
 	if err != nil {
 		return p, err
@@ -430,7 +273,7 @@ func GetMyClassProduct(classID int) (Product, error) {
 			p.Access = false
 			return p, nil
 		}
-		return p, ErrGeekTimeAPIBadCode{PlayAuthV1Path, resp.Code, ""}
+		return p, ErrGeekTimeAPIBadCode{V1VideoPlayAuthPath, resp.Code, ""}
 	}
 
 	p = Product{
@@ -456,30 +299,26 @@ func GetMyClassProduct(classID int) (Product, error) {
 	return p, nil
 }
 
-// GetPlayAuth ...
-func GetPlayAuth(articleID, classID int) (PlayAuthInfo, error) {
-	var info PlayAuthInfo
-	var result PlayAuthResponse
+// PostV1VideoPlayAuth ...
+func PostV1VideoPlayAuth(articleID, classID int) (response.V1VideoPlayAuthResponse, error) {
+	var result response.V1VideoPlayAuthResponse
 	_, err := ugeekTimeClient.R().SetBody(
 		map[string]interface{}{
 			"article_id": articleID,
 			"class_id":   classID,
 		}).
 		SetResult(&result).
-		Post(PlayAuthV1Path)
+		Post(V1VideoPlayAuthPath)
 
 	if err != nil {
-		return info, err
+		return result, err
 	}
 
-	if result.Code != 0 {
-		return info, ErrGeekTimeAPIBadCode{PlayAuthV1Path, result.Code, ""}
+	if result.Code == 0 {
+		return result, nil
 	}
-
-	return PlayAuthInfo{
-		PlayAuth: result.Data.PlayAuth,
-		VideoID:  result.Data.VID,
-	}, nil
+	
+	return result, ErrGeekTimeAPIBadCode{V1VideoPlayAuthPath, result.Code, ""}
 }
 
 // PostV3ProductInfo only used to get daily lesson product info temporarily
@@ -491,7 +330,7 @@ func PostV3ProductInfo(productID int) (response.V3ProductInfoResponse, error) {
 	resp, err := geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
-				"id":	productID,
+				"id": productID,
 			}).
 		SetResult(&result).
 		Post(V3ProductInfoPath)
@@ -520,7 +359,7 @@ func PostV3ArticleInfo(articleID int) (response.V3ArticleInfoResponse, error) {
 	resp, err := geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
-				"id":	articleID,
+				"id": articleID,
 			}).
 		SetResult(&result).
 		Post(V3ArticleInfoPath)
@@ -554,9 +393,9 @@ func PostV3VideoPlayAuth(articleID, sourceType int, videoID string) (string, err
 	resp, err := geekTimeClient.R().
 		SetBody(
 			map[string]interface{}{
-				"aid":	articleID,
-				"source_type":	sourceType,
-				"video_id": videoID,
+				"aid":         articleID,
+				"source_type": sourceType,
+				"video_id":    videoID,
 			}).
 		SetResult(&result).
 		Post(V3VideoPlayAuthPath)

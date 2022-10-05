@@ -40,7 +40,7 @@ var (
 	currentProduct   geektime.Product
 	quality          string
 	downloadComments bool
-	sourceType      int
+	sourceType       int
 	columnOutputType int
 )
 
@@ -199,7 +199,7 @@ func loadProduct(ctx context.Context, productID int) {
 	if sourceType == 5 {
 		p, err = geektime.GetMyClassProduct(productID)
 	} else if sourceType == 1 {
-		p, err = geektime.GetColumnInfo(productID)
+		p, err = geektime.PostV3ColumnInfo(productID)
 	}
 
 	if err != nil {
@@ -359,7 +359,7 @@ func handleDownloadAll(ctx context.Context) {
 			needDownloadAudio := (columnOutputType>>2)&^(b>>2)&1 == 1
 
 			if needDownloadMD || needDownloadAudio {
-				articleInfo, err = geektime.GetColumnArticleInfo(a.AID)
+				articleInfo, err = geektime.GetArticleInfo(a.AID)
 				checkError(err)
 			}
 
@@ -386,7 +386,7 @@ func handleDownloadAll(ctx context.Context) {
 			if sourceType == 1 {
 				err := video.DownloadArticleVideo(ctx, a.AID, sourceType, projectDir, quality, concurrency)
 				checkError(err)
-			}else if sourceType == 5 {
+			} else if sourceType == 5 {
 				err := video.DownloadUniversityVideo(ctx, a.AID, currentProduct, projectDir, quality, concurrency)
 				checkError(err)
 			}
@@ -404,7 +404,7 @@ func loadArticles() {
 	if len(currentProduct.Articles) <= 0 {
 		sp.Prefix = "[ 正在加载文章列表... ]"
 		sp.Start()
-		articles, err := geektime.GetArticles(strconv.Itoa(currentProduct.ID))
+		articles, err := geektime.PostV1ColumnArticles(strconv.Itoa(currentProduct.ID))
 		checkError(err)
 		currentProduct.Articles = articles
 		sp.Stop()
@@ -443,7 +443,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		needDownloadAudio := (columnOutputType>>2)&1 == 1
 
 		if needDownloadMD || needDownloadAudio {
-			articleInfo, err = geektime.GetColumnArticleInfo(article.AID)
+			articleInfo, err = geektime.GetArticleInfo(article.AID)
 			checkError(err)
 		}
 
@@ -462,7 +462,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		if sourceType == 1 {
 			err := video.DownloadArticleVideo(ctx, article.AID, sourceType, projectDir, quality, concurrency)
 			checkError(err)
-		}else if sourceType == 5 {
+		} else if sourceType == 5 {
 			err := video.DownloadUniversityVideo(ctx, article.AID, currentProduct, projectDir, quality, concurrency)
 			checkError(err)
 		}
