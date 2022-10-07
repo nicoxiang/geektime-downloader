@@ -57,20 +57,11 @@ Flags:
       --output int       专栏的输出内容(1pdf,2markdown,4audio)可自由组合 (default 1)
   -u, --phone string     你的极客时间账号(手机号)
   -q, --quality string   下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
-      --university       是否下载训练营的内容
 ```
 
 ## Note
 
 1. 文件下载目标位置可以通过 help 查看。默认情况下 Windows 位于 %USERPROFILE%/geektime-downloader 下；Unix, 包括 macOS, 位于 $HOME/geektime-downloader 下
-
-2. 如何下载训练营课程?
-
-在命令行后追加 --university 参数，其余操作和普通课程相同，训练营暂时只支持下载视频课程
-
-```
-> geektime-downloader.exe -u "phone number" --university
-```
 
 3. 如何查看课程 ID?
 
@@ -88,6 +79,22 @@ https://time.geekbang.org/column/intro/100056701
 
 ```
 https://u.geekbang.org/lesson/419?article=535616
+```
+
+每日一课课程：
+
+选择你想要下载的视频，查看 URL dailylesson/detail/后的数字，例如下面的链接中 100122405 就是课程 ID：
+
+```
+https://time.geekbang.org/dailylesson/detail/100122405
+```
+
+大厂案例课程：
+
+选择你想要下载的视频，查看 URL qconplus/detail/后的数字，例如下面的链接中 100110494 就是课程 ID：
+
+```
+https://time.geekbang.org/qconplus/detail/100110494
 ```
 
 4. Ctrl + C 退出程序
