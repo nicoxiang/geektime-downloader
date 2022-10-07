@@ -67,27 +67,6 @@ type GetPlayInfoResponse struct {
 	PlayInfoList vod.PlayInfoListInGetPlayInfo `json:"PlayInfoList" xml:"PlayInfoList"`
 }
 
-// DownloadProductVideo download different type video via product id, such as daily lesson, qconplus ...
-// sourceType: dialy lesson 2, qconplus 4
-func DownloadProductVideo(ctx context.Context,
-	productID int,
-	sourceType int,
-	projectDir string,
-	quality string,
-	concurrency int,
-) error {
-	productInfo, err := geektime.PostV3ProductInfo(productID)
-	if err != nil {
-		return err
-	}
-	return DownloadArticleVideo(ctx,
-		productInfo.Data.Info.Article.ID,
-		sourceType,
-		projectDir,
-		quality,
-		concurrency)
-}
-
 // DownloadArticleVideo download normal video cource ...
 // sourceType: normal video cource 1
 func DownloadArticleVideo(ctx context.Context,
@@ -123,7 +102,7 @@ func DownloadUniversityVideo(ctx context.Context,
 	quality string,
 	concurrency int) error {
 
-	playAuthInfo, err := geektime.PostV1VideoPlayAuth(articleID, currentProduct.ID)
+	playAuthInfo, err := geektime.PostUniversityV1VideoPlayAuth(articleID, currentProduct.ID)
 	if err != nil {
 		return err
 	}

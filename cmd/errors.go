@@ -25,8 +25,10 @@ func checkError(err error) {
 		if errors.Is(err, context.Canceled) ||
 			errors.Is(err, promptui.ErrInterrupt) {
 			os.Exit(1)
-		} else if errors.As(err, &eg) ||
-			errors.Is(err, geektime.ErrWrongPassword) ||
+		} else if errors.As(err, &eg) {
+			logger.Error(err, eg.ResponseString)
+			exitWithMsg(err.Error())
+		} else if errors.Is(err, geektime.ErrWrongPassword) ||
 			errors.Is(err, geektime.ErrTooManyLoginAttemptTimes) {
 			exitWithMsg(err.Error())
 		} else if errors.Is(err, pgt.ErrGeekTimeRateLimit) ||

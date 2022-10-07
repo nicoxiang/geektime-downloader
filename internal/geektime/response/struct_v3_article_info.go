@@ -114,21 +114,21 @@ type V3ArticleInfoResponse struct {
 			// ContentMd   string        `json:"content_md"`
 			// Attachments []interface{} `json:"attachments"`
 		} `json:"info"`
-		// Product struct {
-		// 	ID         int    `json:"id"`
-		// 	Title      string `json:"title"`
+		Product struct {
+			// ID         int    `json:"id"`
+			// Title      string `json:"title"`
 			// University struct {
 			// 	RedirectType  string `json:"redirect_type"`
 			// 	RedirectParam string `json:"redirect_param"`
 			// } `json:"university"`
-			// Extra struct {
-			// 	Sub struct {
-			// 		HadDone    bool `json:"had_done"`
-			// 		AccessMask int  `json:"access_mask"`
-			// 	} `json:"sub"`
-			// } `json:"extra"`
-		// 	Type string `json:"type"`
-		// } `json:"product"`
+			Extra struct {
+				Sub struct {
+					// HadDone    bool `json:"had_done"`
+					AccessMask int  `json:"access_mask"`
+				} `json:"sub"`
+			} `json:"extra"`
+			Type string `json:"type"`
+		} `json:"product"`
 		// FreeGet    bool `json:"free_get"`
 		// IsFullText bool `json:"is_full_text"`
 	} `json:"data"`

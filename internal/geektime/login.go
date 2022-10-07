@@ -68,5 +68,5 @@ func Login(phone, password string) ([]*http.Cookie, error) {
 	} else if result.Error.Code == -3005 {
 		return nil, ErrTooManyLoginAttemptTimes
 	}
-	return nil, ErrGeekTimeAPIBadCode{LoginPath, result.Error.Code, result.Error.Msg}
+	return nil, ErrGeekTimeAPIBadCode{LoginPath, loginResponse.String()}
 }
