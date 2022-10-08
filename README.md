@@ -1,6 +1,6 @@
 # geektime-downloader
 
-geektime-downloader 支持下载极客时间专栏(PDF/Markdown)和视频课，及训练营视频。
+geektime-downloader 支持下载极客时间专栏(PDF/Markdown/音频)/视频课/每日一课/大厂实践/训练营视频。
 
 [![go report card](https://goreportcard.com/badge/github.com/nicoxiang/geektime-downloader "go report card")](https://goreportcard.com/report/github.com/nicoxiang/geektime-downloader)
 [![MIT license](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
