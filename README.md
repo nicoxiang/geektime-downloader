@@ -61,11 +61,13 @@ Flags:
 
 ## Note
 
-1. 文件下载目标位置可以通过 help 查看。默认情况下 Windows 位于 %USERPROFILE%/geektime-downloader 下；Unix, 包括 macOS, 位于 $HOME/geektime-downloader 下
+### 文件下载目标位置
 
-3. 如何查看课程 ID?
+文件下载目标位置可以通过 help 查看。默认情况下 Windows 位于 %USERPROFILE%/geektime-downloader 下；Unix, 包括 macOS, 位于 $HOME/geektime-downloader 下
 
-普通课程：
+### 如何查看课程 ID?
+
+**普通课程：**
 
 打开极客时间[课程列表页](https://time.geekbang.org/resource)，选择你想要查看的课程，在新打开的课程详情 Tab 页，查看 URL 最后的数字，例如下面的链接中 100056701 就是课程 ID：
 
@@ -73,7 +75,7 @@ Flags:
 https://time.geekbang.org/column/intro/100056701
 ```
 
-训练营课程：
+**训练营课程：**
 
 打开极客时间[训练营课程列表页](https://u.geekbang.org/schedule)，选择你想要查看的课程，在新打开的课程详情 Tab 页，查看 URL lesson/后的数字，例如下面的链接中 419 就是课程 ID：
 
@@ -81,7 +83,7 @@ https://time.geekbang.org/column/intro/100056701
 https://u.geekbang.org/lesson/419?article=535616
 ```
 
-每日一课课程：
+**每日一课课程：**
 
 选择你想要下载的视频，查看 URL dailylesson/detail/后的数字，例如下面的链接中 100122405 就是课程 ID：
 
@@ -89,7 +91,7 @@ https://u.geekbang.org/lesson/419?article=535616
 https://time.geekbang.org/dailylesson/detail/100122405
 ```
 
-大厂案例课程：
+**大厂案例课程：**
 
 选择你想要下载的视频，查看 URL qconplus/detail/后的数字，例如下面的链接中 100110494 就是课程 ID：
 
@@ -97,14 +99,16 @@ https://time.geekbang.org/dailylesson/detail/100122405
 https://time.geekbang.org/qconplus/detail/100110494
 ```
 
-4. Ctrl + C 退出程序
-
-5. 如何下载专栏的 Markdown 格式和文章音频?
+### 如何下载专栏的 Markdown 格式和文章音频?
 
 默认情况下载专栏的输出内容只有 PDF，可以通过 --output 参数按需选择是否需要下载 Markdown 格式和文章音频。比如 --output 3 就是下载 PDF 和 Markdown；--output 6 就是下载 Markdown 和音频；--output 7 就是下载所有。
 
 Markdown 格式虽然显示效果上不及 PDF，但优势为可以显示完整的代码块（PDF 代码块在水平方向太长时会有缺失）并保留了原文中的超链接。
 
-6. 如果选择下载所有后中断程序，可重新进入程序继续下载
+### 退出程序和继续下载
 
-7. 通过密码登录的情况下，为了避免多次登录账户，会在目录 [UserConfigDir](https://pkg.go.dev/os#UserConfigDir)/geektime-downloader 下存放用户的登录 cookie，如果不是在自己的电脑上执行，请在使用完毕程序后手动删除
+Ctrl + C 退出程序。如果选择“下载所有”后中断程序，可重新进入程序继续下载。
+
+### 隐私相关
+
+通过密码登录的情况下，为了避免多次登录账户，会在目录 [UserConfigDir](https://pkg.go.dev/os#UserConfigDir)/geektime-downloader 下存放用户的登录 cookie，如果不是在自己的电脑上执行，建议在使用完毕程序后手动删除
