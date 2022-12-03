@@ -22,7 +22,6 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/audio"
 	"github.com/nicoxiang/geektime-downloader/internal/config"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
-	"github.com/nicoxiang/geektime-downloader/internal/geektime/response"
 	"github.com/nicoxiang/geektime-downloader/internal/markdown"
 	"github.com/nicoxiang/geektime-downloader/internal/pdf"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
@@ -327,7 +326,11 @@ func handleDownloadAll(ctx context.Context) {
 		var chromedpCtx context.Context
 		var cancel context.CancelFunc
 
-		if columnOutputType&1 == 1 {
+		needDownloadPDF := columnOutputType&1 == 1
+		needDownloadMD := (columnOutputType>>1)&1 == 1
+		needDownloadAudio := (columnOutputType>>2)&1 == 1
+
+		if needDownloadPDF {
 			chromedpCtx, cancel = chromedp.NewContext(ctx)
 			// start the browser
 			err := chromedp.Run(chromedpCtx)
@@ -353,9 +356,10 @@ func handleDownloadAll(ctx context.Context) {
 				continue
 			}
 
-			var err error
+			articleInfo, err := geektime.GetArticleInfo(a.AID)
+			checkError(err)
 
-			if columnOutputType&^b&1 == 1 {
+			if needDownloadPDF {
 				err = pdf.PrintArticlePageToPDF(chromedpCtx,
 					a.AID,
 					projectDir,
@@ -368,15 +372,14 @@ func handleDownloadAll(ctx context.Context) {
 					cancel()
 					checkError(err)
 				}
-			}
 
-			var articleInfo response.V1ArticleResponse
-			needDownloadMD := (columnOutputType>>1)&^(b>>1)&1 == 1
-			needDownloadAudio := (columnOutputType>>2)&^(b>>2)&1 == 1
-
-			if needDownloadMD || needDownloadAudio {
-				articleInfo, err = geektime.GetArticleInfo(a.AID)
-				checkError(err)
+				if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
+					videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
+					for i, v := range articleInfo.Data.InlineVideoSubtitles {
+						videoURLs[i] = v.VideoURL
+					}
+					err = video.DownloadMP4(ctx, a.Title, projectDir, videoURLs)
+				}
 			}
 
 			if needDownloadMD {
@@ -429,10 +432,20 @@ func loadArticles() {
 
 func downloadArticle(ctx context.Context, article geektime.Article, projectDir string) {
 	if isText() {
+		needDownloadPDF := columnOutputType&1 == 1
+		needDownloadMD := (columnOutputType>>1)&1 == 1
+		needDownloadAudio := (columnOutputType>>2)&1 == 1
+
+		articleInfo, err := geektime.GetArticleInfo(article.AID)
+		checkError(err)
+
 		sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》... ]", article.Title)
+		if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
+			sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》, 该文章中包含视频, 请耐心等待... ]", article.Title)
+		}
 		sp.Start()
 
-		if columnOutputType&1 == 1 {
+		if needDownloadPDF {
 			chromedpCtx, cancel := chromedp.NewContext(ctx)
 			// start the browser
 			err := chromedp.Run(chromedpCtx)
@@ -451,16 +464,14 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 				cancel()
 				checkError(err)
 			}
-		}
 
-		var articleInfo response.V1ArticleResponse
-		var err error
-		needDownloadMD := (columnOutputType>>1)&1 == 1
-		needDownloadAudio := (columnOutputType>>2)&1 == 1
-
-		if needDownloadMD || needDownloadAudio {
-			articleInfo, err = geektime.GetArticleInfo(article.AID)
-			checkError(err)
+			if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
+				videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
+				for i, v := range articleInfo.Data.InlineVideoSubtitles {
+					videoURLs[i] = v.VideoURL
+				}
+				err = video.DownloadMP4(ctx, article.Title, projectDir, videoURLs)
+			}
 		}
 
 		if needDownloadMD {
@@ -471,9 +482,8 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 			err = audio.DownloadAudio(ctx, articleInfo.Data.AudioDownloadURL, projectDir, article.Title)
 		}
 
-		checkError(err)
-
 		sp.Stop()
+		checkError(err)
 	} else if isVideo() {
 		if sourceType == 1 {
 			err := video.DownloadArticleVideo(ctx, article.AID, sourceType, projectDir, quality, concurrency)

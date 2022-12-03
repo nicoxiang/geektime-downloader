@@ -51,7 +51,14 @@ type V1ArticleResponse struct {
 		// VideoCover           string        `json:"video_cover"`
 		// AuthorName           string        `json:"author_name"`
 		// ColumnIsOnboard      bool          `json:"column_is_onboard"`
-		// InlineVideoSubtitles []interface{} `json:"inline_video_subtitles"`
+		InlineVideoSubtitles []struct {
+			VideoURL          string `json:"video_url"`
+			VideoFreeURL      string `json:"video_free_url"`
+			VideoVid          string `json:"video_vid"`
+			VideoSubtitle     string `json:"video_subtitle"`
+			VideoFreeVid      string `json:"video_free_vid"`
+			VideoFreeSubtitle string `json:"video_free_subtitle"`
+		} `json:"inline_video_subtitles"`
 		// AudioURL             string        `json:"audio_url"`
 		// ChapterID            string        `json:"chapter_id"`
 		// ColumnHadSub         bool          `json:"column_had_sub"`

@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"io/ioutil"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -168,6 +170,68 @@ func DownloadHLSStandardEncryptVideo(ctx context.Context, m3u8url, title, projec
 	}
 
 	return download(ctx, tsURLPrefix, title, projectDir, tsFileNames, decryptKey, size, HLSStandardEncrypt, concurrency)
+}
+
+// DownloadMP4 ...
+func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string) (err error) {
+	filenamifyTitle := filenamify.Filenamify(title)
+	videoDir := filepath.Join(projectDir, "videos", filenamifyTitle)
+	if err = os.MkdirAll(videoDir, os.ModePerm); err != nil {
+		return
+	}
+	g, ctx := errgroup.WithContext(ctx)
+	ch := make(chan string, len(mp4URLs))
+	downloadClient.SetOutputDirectory(videoDir)
+
+	for i := 0; i < len(mp4URLs); i++ {
+		g.Go(func() error {
+			return writeMP4File(ctx, ch)
+		})
+	}
+
+	for _, mp4URL := range mp4URLs {
+		ch <- mp4URL
+	}
+	close(ch)
+	err = g.Wait()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func writeMP4File(ctx context.Context, mp4URLs chan string) (err error) {
+	var es []error
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			for range mp4URLs {
+			}
+		case mp4URL, ok := <-mp4URLs:
+			if !ok {
+				break loop
+			}
+			if mp4URL == "" {
+				return
+			}
+
+			u, _ := url.Parse(mp4URL)
+			_, err = downloadClient.R().
+				SetContext(ctx).
+				SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
+				SetOutput(path.Base(u.Path)).
+				Get(mp4URL)
+			if err != nil {
+				es = append(es, err)
+				continue
+			}
+		}
+	}
+	if len(es) > 0 {
+		return es[0]
+	}
+	return nil
 }
 
 func download(ctx context.Context,
