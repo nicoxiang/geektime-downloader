@@ -448,7 +448,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		if needDownloadPDF {
 			chromedpCtx, cancel := chromedp.NewContext(ctx)
 			// start the browser
-			err := chromedp.Run(chromedpCtx)
+			err = chromedp.Run(chromedpCtx)
 			checkError(err)
 			defer cancel()
 			err = pdf.PrintArticlePageToPDF(chromedpCtx,
