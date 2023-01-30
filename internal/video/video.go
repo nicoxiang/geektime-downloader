@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cavaliergopher/grab/v3"
 	"github.com/cheggaaa/pb/v3"
 	"github.com/go-resty/resty/v2"
 	"github.com/google/uuid"
@@ -22,7 +23,6 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/m3u8"
 	"github.com/nicoxiang/geektime-downloader/internal/video/vod"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -42,24 +42,19 @@ const (
 )
 
 var (
-	// make simple api call
 	client *resty.Client
-	// used to download video
-	downloadClient *resty.Client
+	grabClient *grab.Client
 )
 
 func init() {
 	client = resty.New().
-		SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
-		SetRetryCount(1).
-		SetTimeout(10 * time.Second).
-		SetLogger(logger.DiscardLogger{})
+	SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
+	SetRetryCount(1).
+	SetTimeout(10 * time.Second).
+	SetLogger(logger.DiscardLogger{})
 
-	downloadClient = resty.New().
-		SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
-		SetRetryCount(0).
-		SetTimeout(time.Minute).
-		SetLogger(logger.DiscardLogger{})
+	grabClient = grab.NewClient()
+	grabClient.UserAgent = pgt.UserAgentHeaderValue
 }
 
 // GetPlayInfoResponse is the response struct for api GetPlayInfo
@@ -179,59 +174,29 @@ func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string
 	if err = os.MkdirAll(videoDir, os.ModePerm); err != nil {
 		return
 	}
-	g, ctx := errgroup.WithContext(ctx)
-	ch := make(chan string, len(mp4URLs))
-	downloadClient.SetOutputDirectory(videoDir)
 
-	for i := 0; i < len(mp4URLs); i++ {
-		g.Go(func() error {
-			return writeMP4File(ctx, ch)
-		})
-	}
-
+	reqs := make([]*grab.Request, len(mp4URLs))
 	for _, mp4URL := range mp4URLs {
-		ch <- mp4URL
+		u, _ := url.Parse(mp4URL)
+		dst := filepath.Join(videoDir, path.Base(u.Path))
+		request, err := grab.NewRequest(dst, mp4URL)
+		if err != nil {
+			//TODO: error handling
+			panic(err)
+		}
+		request.HTTPRequest.Header.Set(pgt.OriginHeaderName, pgt.GeekBang)
+		reqs = append(reqs, request)
 	}
-	close(ch)
-	err = g.Wait()
-	if err != nil {
-		return err
-	}
-	return nil
-}
+	
+	respch := grabClient.DoBatch(0, reqs...)
 
-func writeMP4File(ctx context.Context, mp4URLs chan string) (err error) {
-	var es []error
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			for range mp4URLs {
-			}
-		case mp4URL, ok := <-mp4URLs:
-			if !ok {
-				break loop
-			}
-			if mp4URL == "" {
-				return
-			}
-
-			u, _ := url.Parse(mp4URL)
-			_, err = downloadClient.R().
-				SetContext(ctx).
-				SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
-				SetOutput(path.Base(u.Path)).
-				Get(mp4URL)
-			if err != nil {
-				es = append(es, err)
-				continue
-			}
+	// check each response
+	for resp := range respch {
+		if err := resp.Err(); err != nil {
+			return err
 		}
 	}
-	if len(es) > 0 {
-		return es[0]
-	}
-	return nil
+	return
 }
 
 func download(ctx context.Context,
@@ -255,66 +220,38 @@ func download(ctx context.Context,
 		_ = os.RemoveAll(tempVideoDir)
 	}()
 
-	// classic bounded work pooling pattern
-	g, ctx := errgroup.WithContext(ctx)
-	ch := make(chan string, concurrency)
-
 	bar := newBar(size, fmt.Sprintf("[正在下载 %s] ", filenamifyTitle))
 	bar.Start()
 
-	downloadClient.SetOutputDirectory(tempVideoDir)
-
-	for i := 0; i < concurrency; i++ {
-		g.Go(func() error {
-			return writeToTempVideoFile(ctx, ch, bar, tsURLPrefix)
-		})
-	}
-
+	reqs := make([]*grab.Request, len(tsFileNames))
 	for _, tsFileName := range tsFileNames {
-		ch <- tsFileName
+		u := tsURLPrefix + tsFileName
+		dst := filepath.Join(tempVideoDir, tsFileName)
+		request, err := grab.NewRequest(dst, u)
+		if err != nil {
+			//TODO: error handling
+			panic(err)
+		}
+		request.HTTPRequest.Header.Set(pgt.OriginHeaderName, pgt.GeekBang)
+		reqs = append(reqs, request)
 	}
-	close(ch)
-	err = g.Wait()
+	
+	respch := grabClient.DoBatch(concurrency, reqs...)
+
+	// check each response
+	for resp := range respch {
+		if err := resp.Err(); err != nil {
+			return err
+		}
+		addBarValue(bar, resp.BytesComplete())
+	}
+	
 	bar.Finish()
-	if err != nil {
-		return
-	}
 
 	// Read temp ts files, decrypt and merge into the one final video file
 	err = mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir, decryptKey, videoEncryptType)
 
 	return
-}
-
-func writeToTempVideoFile(ctx context.Context,
-	tsFileNames chan string,
-	bar *pb.ProgressBar,
-	tsURLPrefix string) (err error) {
-	for tsFileName := range tsFileNames {
-
-		// fix error: http2: server sent GOAWAY and closed the connection; LastStreamID=1999
-		// resty retry not work, because error comes from io read, not request
-		err := retry(5, 700*time.Millisecond, func() error {
-			resp, err := downloadClient.R().
-				SetContext(ctx).
-				SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
-				SetOutput(tsFileName).
-				Get(tsURLPrefix + tsFileName)
-			if err != nil {
-				return err
-			}
-			addBarValue(bar, resp.Size())
-			return nil
-		})
-
-		if err != nil {
-			for range tsFileNames {
-			}
-			return err
-		}
-
-	}
-	return nil
 }
 
 func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte, videoEncryptType EncryptType) error {
@@ -409,18 +346,4 @@ func getPlayInfo(playInfoURL, quality string) (vod.PlayInfo, error) {
 		}
 	}
 	return playInfo, nil
-}
-
-func retry(attempts int, sleep time.Duration, f func() error) (err error) {
-	for i := 0; i < attempts; i++ {
-		if i > 0 {
-			time.Sleep(sleep)
-			sleep *= 2
-		}
-		err = f()
-		if err == nil || errors.Is(err, context.Canceled) {
-			return err
-		}
-	}
-	return fmt.Errorf("after %d attempts, last error: %s", attempts, err)
 }
