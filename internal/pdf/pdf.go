@@ -14,15 +14,22 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/device"
+	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
-	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 )
 
 // PDFExtension ...
 const PDFExtension = ".pdf"
 
 // PrintArticlePageToPDF use chromedp to print article page and save
-func PrintArticlePageToPDF(ctx context.Context, aid int, dir, title string, cookies []*http.Cookie, downloadComments bool) error {
+func PrintArticlePageToPDF(ctx context.Context,
+	aid int,
+	dir,
+	title string,
+	cookies []*http.Cookie,
+	downloadComments bool,
+	waitSeconds int,
+) error {
 	rateLimit := false
 	// new tab
 	ctx, cancel := chromedp.NewContext(ctx)
@@ -35,7 +42,7 @@ func PrintArticlePageToPDF(ctx context.Context, aid int, dir, title string, cook
 		switch responseReceivedEvent := ev.(type) {
 		case *network.EventResponseReceived:
 			response := responseReceivedEvent.Response
-			if response.URL == pgt.GeekBang+"/serv/v1/article" && response.Status == 451 {
+			if response.URL == geektime.DefaultBaseURL+"/serv/v1/article" && response.Status == 451 {
 				rateLimit = true
 				cancel()
 			}
@@ -47,11 +54,7 @@ func PrintArticlePageToPDF(ctx context.Context, aid int, dir, title string, cook
 		chromedp.Tasks{
 			chromedp.Emulate(device.IPadPro11),
 			setCookies(cookies),
-			chromedp.Navigate(pgt.GeekBang + `/column/article/` + strconv.Itoa(aid)),
-			// wait for loading show
-			chromedp.WaitVisible("._loading_wrap_", chromedp.ByQuery),
-			// wait for loading disappear
-			chromedp.WaitNotPresent("._loading_wrap_", chromedp.ByQuery),
+			chromedp.Navigate(geektime.DefaultBaseURL + `/column/article/` + strconv.Itoa(aid)),
 			waitForImagesLoad(),
 			hideRedundantElements(downloadComments),
 			printToPDF(&buf),
@@ -60,7 +63,7 @@ func PrintArticlePageToPDF(ctx context.Context, aid int, dir, title string, cook
 
 	if err != nil {
 		if rateLimit {
-			return pgt.ErrGeekTimeRateLimit
+			return geektime.ErrGeekTimeRateLimit
 		}
 		return err
 	}
@@ -77,7 +80,7 @@ func setCookies(cookies []*http.Cookie) chromedp.ActionFunc {
 		expr := cdp.TimeSinceEpoch(time.Now().Add(180 * 24 * time.Hour))
 
 		for _, c := range cookies {
-			err := network.SetCookie(c.Name, c.Value).WithExpires(&expr).WithDomain(pgt.GeekBangCookieDomain).WithHTTPOnly(true).Do(ctx)
+			err := network.SetCookie(c.Name, c.Value).WithExpires(&expr).WithDomain(geektime.GeekBangCookieDomain).WithHTTPOnly(true).Do(ctx)
 			if err != nil {
 				return err
 			}
@@ -178,7 +181,7 @@ func printToPDF(res *[]byte) chromedp.ActionFunc {
 
 func waitForImagesLoad() chromedp.ActionFunc {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
-		return waitFor(ctx, "networkIdle")
+		return waitFor(ctx, "networkAlmostIdle")
 	})
 }
 

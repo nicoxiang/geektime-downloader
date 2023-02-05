@@ -2,7 +2,6 @@ package video
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -14,13 +13,10 @@ import (
 
 	"github.com/cavaliergopher/grab/v3"
 	"github.com/cheggaaa/pb/v3"
-	"github.com/go-resty/resty/v2"
 	"github.com/google/uuid"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/crypto"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
-	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/m3u8"
 	"github.com/nicoxiang/geektime-downloader/internal/video/vod"
 )
@@ -41,22 +37,6 @@ const (
 	HLSStandardEncrypt
 )
 
-var (
-	client *resty.Client
-	grabClient *grab.Client
-)
-
-func init() {
-	client = resty.New().
-	SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
-	SetRetryCount(1).
-	SetTimeout(10 * time.Second).
-	SetLogger(logger.DiscardLogger{})
-
-	grabClient = grab.NewClient()
-	grabClient.UserAgent = pgt.UserAgentHeaderValue
-}
-
 // GetPlayInfoResponse is the response struct for api GetPlayInfo
 type GetPlayInfoResponse struct {
 	RequestID    string                        `json:"RequestId" xml:"RequestId"`
@@ -67,6 +47,8 @@ type GetPlayInfoResponse struct {
 // DownloadArticleVideo download normal video cource ...
 // sourceType: normal video cource 1
 func DownloadArticleVideo(ctx context.Context,
+	client *geektime.Client,
+	grabClient *grab.Client,
 	articleID int,
 	sourceType int,
 	projectDir string,
@@ -74,15 +56,17 @@ func DownloadArticleVideo(ctx context.Context,
 	concurrency int,
 ) error {
 
-	articleInfo, err := geektime.PostV3ArticleInfo(articleID)
+	articleInfo, err := client.V3ArticleInfo(articleID)
 	if err != nil {
 		return err
 	}
-	playAuth, err := geektime.PostV3VideoPlayAuth(articleInfo.Data.Info.ID, sourceType, articleInfo.Data.Info.Video.ID)
+	playAuth, err := client.VideoPlayAuth(articleInfo.Data.Info.ID, sourceType, articleInfo.Data.Info.Video.ID)
 	if err != nil {
 		return err
 	}
 	return downloadAliyunVodEncryptVideo(ctx,
+		client,
+		grabClient,
 		playAuth,
 		articleInfo.Data.Info.Title,
 		projectDir,
@@ -93,19 +77,23 @@ func DownloadArticleVideo(ctx context.Context,
 
 // DownloadUniversityVideo ...
 func DownloadUniversityVideo(ctx context.Context,
+	client *geektime.Client,
+	grabClient *grab.Client,
 	articleID int,
 	currentProduct geektime.Product,
 	projectDir string,
 	quality string,
 	concurrency int) error {
 
-	playAuthInfo, err := geektime.PostUniversityV1VideoPlayAuth(articleID, currentProduct.ID)
+	playAuthInfo, err := client.UniversityVideoPlayAuth(articleID, currentProduct.ID)
 	if err != nil {
 		return err
 	}
 
 	videoTitle := getUniversityVideoTitle(articleID, currentProduct)
 	return downloadAliyunVodEncryptVideo(ctx,
+		client,
+		grabClient,
 		playAuthInfo.Data.PlayAuth,
 		videoTitle,
 		projectDir,
@@ -115,6 +103,8 @@ func DownloadUniversityVideo(ctx context.Context,
 }
 
 func downloadAliyunVodEncryptVideo(ctx context.Context,
+	client *geektime.Client,
+	grabClient *grab.Client,
 	playAuth,
 	videoTitle,
 	projectDir,
@@ -127,48 +117,22 @@ func downloadAliyunVodEncryptVideo(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	playInfo, err := getPlayInfo(playInfoURL, quality)
+	playInfo, err := getPlayInfo(client, playInfoURL, quality)
 	if err != nil {
 		return err
 	}
 	tsURLPrefix := extractTSURLPrefix(playInfo.PlayURL)
 	// just ignore keyURI in m3u8, aliyun private vod use another decrypt method
-	tsFileNames, _, err := m3u8.Parse(playInfo.PlayURL)
+	tsFileNames, _, err := m3u8.Parse(client, playInfo.PlayURL)
 	if err != nil {
 		return err
 	}
 	decryptKey := crypto.GetAESDecryptKey(clientRand, playInfo.Rand, playInfo.Plaintext)
-	return download(ctx, tsURLPrefix, videoTitle, projectDir, tsFileNames, []byte(decryptKey), playInfo.Size, AliyunVodEncrypt, concurrency)
-}
-
-// DownloadHLSStandardEncryptVideo ...
-func DownloadHLSStandardEncryptVideo(ctx context.Context, m3u8url, title, projectDir string, size int64, concurrency int) (err error) {
-	tsURLPrefix := extractTSURLPrefix(m3u8url)
-	tsFileNames, keyURI, err := m3u8.Parse(m3u8url)
-	if err != nil {
-		return err
-	}
-	var decryptKey []byte
-	// Old version keyURI
-	// https://misc.geekbang.org/serv/v1/decrypt/decryptkms/?Ciphertext=longlongstring
-	if strings.HasPrefix(keyURI, "https://") || strings.HasPrefix(keyURI, "http://") {
-		resp, err := client.R().
-			SetContext(ctx).
-			SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
-			Get(keyURI)
-		decryptKey = resp.Body()
-		if err != nil {
-			return err
-		}
-	} else {
-		return errors.New("unexpected m3u8 keyURI")
-	}
-
-	return download(ctx, tsURLPrefix, title, projectDir, tsFileNames, decryptKey, size, HLSStandardEncrypt, concurrency)
+	return download(ctx, grabClient, tsURLPrefix, videoTitle, projectDir, tsFileNames, []byte(decryptKey), playInfo.Size, AliyunVodEncrypt, concurrency)
 }
 
 // DownloadMP4 ...
-func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string) (err error) {
+func DownloadMP4(ctx context.Context, grabClient *grab.Client, title, projectDir string, mp4URLs []string) (err error) {
 	filenamifyTitle := filenamify.Filenamify(title)
 	videoDir := filepath.Join(projectDir, "videos", filenamifyTitle)
 	if err = os.MkdirAll(videoDir, os.ModePerm); err != nil {
@@ -179,15 +143,11 @@ func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string
 	for _, mp4URL := range mp4URLs {
 		u, _ := url.Parse(mp4URL)
 		dst := filepath.Join(videoDir, path.Base(u.Path))
-		request, err := grab.NewRequest(dst, mp4URL)
-		if err != nil {
-			//TODO: error handling
-			panic(err)
-		}
-		request.HTTPRequest.Header.Set(pgt.OriginHeaderName, pgt.GeekBang)
+		request, _ := grab.NewRequest(dst, mp4URL)
+		request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
 		reqs = append(reqs, request)
 	}
-	
+
 	respch := grabClient.DoBatch(0, reqs...)
 
 	// check each response
@@ -200,6 +160,7 @@ func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string
 }
 
 func download(ctx context.Context,
+	grabClient *grab.Client,
 	tsURLPrefix,
 	title,
 	projectDir string,
@@ -227,15 +188,11 @@ func download(ctx context.Context,
 	for _, tsFileName := range tsFileNames {
 		u := tsURLPrefix + tsFileName
 		dst := filepath.Join(tempVideoDir, tsFileName)
-		request, err := grab.NewRequest(dst, u)
-		if err != nil {
-			//TODO: error handling
-			panic(err)
-		}
-		request.HTTPRequest.Header.Set(pgt.OriginHeaderName, pgt.GeekBang)
+		request, _ := grab.NewRequest(dst, u)
+		request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
 		reqs = append(reqs, request)
 	}
-	
+
 	respch := grabClient.DoBatch(concurrency, reqs...)
 
 	// check each response
@@ -245,7 +202,7 @@ func download(ctx context.Context,
 		}
 		addBarValue(bar, resp.BytesComplete())
 	}
-	
+
 	bar.Finish()
 
 	// Read temp ts files, decrypt and merge into the one final video file
@@ -327,11 +284,11 @@ func extractTSURLPrefix(m3u8url string) string {
 	return m3u8url[:i+1]
 }
 
-func getPlayInfo(playInfoURL, quality string) (vod.PlayInfo, error) {
+func getPlayInfo(client *geektime.Client, playInfoURL, quality string) (vod.PlayInfo, error) {
 	var getPlayInfoResp GetPlayInfoResponse
 	var playInfo vod.PlayInfo
-	_, err := client.R().
-		SetHeader(pgt.OriginHeaderName, pgt.GeekBangUniversity).
+	client.BaseURL = geektime.GeekBangUniversityBaseURL
+	_, err := client.HTTPClient.R().
 		SetResult(&getPlayInfoResp).
 		Get(playInfoURL)
 

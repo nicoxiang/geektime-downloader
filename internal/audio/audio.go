@@ -2,15 +2,12 @@ package audio
 
 import (
 	"context"
-	"errors"
 	"os"
 	"path/filepath"
-	"time"
 
-	"github.com/go-resty/resty/v2"
+	"github.com/cavaliergopher/grab/v3"
+	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
-	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 const (
@@ -19,25 +16,20 @@ const (
 )
 
 // DownloadAudio ...
-func DownloadAudio(ctx context.Context, downloadAudioURL, dir, title string) error {
+func DownloadAudio(ctx context.Context, grabClient *grab.Client, downloadAudioURL, dir, title string) error {
 	if downloadAudioURL == "" {
 		return nil
 	}
 	filenamifyTitle := filenamify.Filenamify(title)
-	c := resty.New()
-	c.SetOutputDirectory(dir).
-		SetRetryCount(1).
-		SetTimeout(time.Minute).
-		SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
-		SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
-		SetLogger(logger.DiscardLogger{})
 
-	_, err := c.R().
-		SetContext(ctx).
-		SetOutput(filenamifyTitle + MP3Extension).
-		Get(downloadAudioURL)
+	dst := filepath.Join(dir, filenamifyTitle + MP3Extension)
+	request, _ := grab.NewRequest(dst, downloadAudioURL)
+	request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
 
-	if errors.Is(err, context.Canceled) {
+	resp := grabClient.Do(request)
+	
+	err := resp.Err()
+	if err != nil {
 		fullName := filepath.Join(dir, filenamifyTitle + MP3Extension)
 		_ = os.Remove(fullName)
 	}

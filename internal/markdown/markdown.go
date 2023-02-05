@@ -9,14 +9,11 @@ import (
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
-	"github.com/go-resty/resty/v2"
+	"github.com/cavaliergopher/grab/v3"
+	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
-	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
-	"golang.org/x/sync/errgroup"
 )
 
 var (
@@ -39,7 +36,7 @@ func (ms *markdownString) ReplaceAll(o, n string) {
 }
 
 // Download ...
-func Download(ctx context.Context, html, title, dir string, aid, concurrency int) error {
+func Download(ctx context.Context, grabClient *grab.Client, html, title, dir string, aid, concurrency int) error {
 	select {
 	case <-ctx.Done():
 		return context.Canceled
@@ -57,28 +54,8 @@ func Download(ctx context.Context, html, title, dir string, aid, concurrency int
 	// images/aid/imageName.png
 	imagesFolder := filepath.Join(dir, "images", strconv.Itoa(aid))
 
-	c := resty.New()
-	c.SetOutputDirectory(imagesFolder).
-		SetRetryCount(1).
-		SetTimeout(5*time.Second).
-		SetHeader(pgt.UserAgentHeaderName, pgt.UserAgentHeaderValue).
-		SetHeader(pgt.OriginHeaderName, pgt.GeekBang).
-		SetLogger(logger.DiscardLogger{})
+	err = writeImageFile(ctx, grabClient, imageURLs, dir, imagesFolder, ss, concurrency)
 
-	g := new(errgroup.Group)
-	ch := make(chan string, concurrency)
-
-	for i := 0; i < concurrency; i++ {
-		g.Go(func() error {
-			return writeImageFile(ctx, ch, dir, imagesFolder, c, ss)
-		})
-	}
-
-	for _, imageURL := range imageURLs {
-		ch <- imageURL
-	}
-	close(ch)
-	err = g.Wait()
 	if err != nil {
 		return err
 	}
@@ -115,47 +92,30 @@ func getDefaultConverter() *md.Converter {
 	return converter
 }
 
-func writeImageFile(ctx context.Context, imageURLs chan string, dir, imagesFolder string, c *resty.Client, ms *markdownString) (err error) {
-	var es []error
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			for range imageURLs {
-			}
-		case imageURL, ok := <-imageURLs:
-			if !ok {
-				break loop
-			}
-			if imageURL == "" {
-				return
-			}
-			segments := strings.Split(imageURL, "/")
-			f := segments[len(segments)-1]
-			if i := strings.Index(f, "?"); i > 0 {
-				f = f[:i]
-			}
-			imageLocalFullPath := filepath.Join(imagesFolder, f)
-			rel, err := filepath.Rel(dir, imageLocalFullPath)
-			if err != nil {
-				es = append(es, err)
-				break loop
-			}
-
-			_, err = c.R().
-				SetContext(ctx).
-				SetOutput(f).
-				Get(imageURL)
-			if err != nil {
-				es = append(es, err)
-				continue
-			}
-
-			ms.ReplaceAll(imageURL, filepath.ToSlash(rel))
-		}
+func writeImageFile(ctx context.Context,
+	grabClient *grab.Client,
+	imageURLs []string,
+	dir,
+	imagesFolder string,
+	ms *markdownString,
+	concurrency int,
+) (err error) {
+	reqs := make([]*grab.Request, len(imageURLs))
+	for _, imageURL := range imageURLs {
+		dst := filepath.Join(imagesFolder, imageURL)
+		request, _ := grab.NewRequest(dst, imageURL)
+		request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
+		reqs = append(reqs, request)
+		rel, _ := filepath.Rel(dir, dst)
+		ms.ReplaceAll(imageURL, filepath.ToSlash(rel))
 	}
-	if len(es) > 0 {
-		return es[0]
+	respch := grabClient.DoBatch(concurrency, reqs...)
+
+	// check each response
+	for resp := range respch {
+		if err := resp.Err(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
