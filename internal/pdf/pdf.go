@@ -28,7 +28,6 @@ func PrintArticlePageToPDF(ctx context.Context,
 	title string,
 	cookies []*http.Cookie,
 	downloadComments bool,
-	waitSeconds int,
 ) error {
 	rateLimit := false
 	// new tab
