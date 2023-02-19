@@ -24,6 +24,7 @@ func DownloadAudio(ctx context.Context, grabClient *grab.Client, downloadAudioUR
 
 	dst := filepath.Join(dir, filenamifyTitle + MP3Extension)
 	request, _ := grab.NewRequest(dst, downloadAudioURL)
+	request = request.WithContext(ctx)
 	request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
 
 	resp := grabClient.Do(request)

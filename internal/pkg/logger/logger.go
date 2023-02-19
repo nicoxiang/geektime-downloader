@@ -21,7 +21,7 @@ func init(){
 	logFilePath := filepath.Join(userConfigDir, GeektimeLogFolder, GeektimeLogFolder + ".log")
 
 	logger.SetFormatter(&logrus.TextFormatter{})
-	logger.SetReportCaller(true)
+	logger.SetReportCaller(false)
 	logger.SetLevel(logrus.WarnLevel)
 	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
 	if err == nil {

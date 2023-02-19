@@ -38,9 +38,9 @@ const (
 	// V3ProductInfoPath used in get daily lesson, qconplus product info
 	V3ProductInfoPath = "/serv/v3/product/info"
 	// V3ArticleInfoPath used in normal video, daily lesson, qconplus
-	V3ArticleInfoPath = "serv/v3/article/info"
+	V3ArticleInfoPath = "/serv/v3/article/info"
 	// V3VideoPlayAuthPath used in normal video, daily lesson, qconplus video play auth
-	V3VideoPlayAuthPath = "serv/v3/source_auth/video_play_auth"
+	V3VideoPlayAuthPath = "/serv/v3/source_auth/video_play_auth"
 
 	// UniversityV1VideoPlayAuthPath used in university video play auth
 	UniversityV1VideoPlayAuthPath = "/serv/v1/video/play-auth"
@@ -153,7 +153,6 @@ func (c *Client) Login(phone, password string) ([]*http.Cookie, error) {
 		} `json:"error"`
 	}
 
-	c.BaseURL = GeekBangAccountBaseURL
 	r := c.newRequest(resty.MethodPost,
 		LoginPath,
 		nil,
@@ -194,7 +193,6 @@ func (c *Client) Auth(cs []*http.Cookie) error {
 		Code int `json:"code"`
 	}
 	t := fmt.Sprintf("%v", time.Now().Round(time.Millisecond).UnixNano()/(int64(time.Millisecond)/int64(time.Nanosecond)))
-	c.BaseURL = GeekBangAccountBaseURL
 	c.HTTPClient.Cookies = cs
 	params := make(map[string]string, 1)
 	params["t"] = t

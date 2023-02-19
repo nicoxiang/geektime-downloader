@@ -140,12 +140,13 @@ func DownloadMP4(ctx context.Context, grabClient *grab.Client, title, projectDir
 	}
 
 	reqs := make([]*grab.Request, len(mp4URLs))
-	for _, mp4URL := range mp4URLs {
+	for i, mp4URL := range mp4URLs {
 		u, _ := url.Parse(mp4URL)
 		dst := filepath.Join(videoDir, path.Base(u.Path))
 		request, _ := grab.NewRequest(dst, mp4URL)
+		request = request.WithContext(ctx)
 		request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
-		reqs = append(reqs, request)
+		reqs[i] = request
 	}
 
 	respch := grabClient.DoBatch(0, reqs...)
@@ -185,12 +186,13 @@ func download(ctx context.Context,
 	bar.Start()
 
 	reqs := make([]*grab.Request, len(tsFileNames))
-	for _, tsFileName := range tsFileNames {
+	for i, tsFileName := range tsFileNames {
 		u := tsURLPrefix + tsFileName
 		dst := filepath.Join(tempVideoDir, tsFileName)
 		request, _ := grab.NewRequest(dst, u)
+		request = request.WithContext(ctx)
 		request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
-		reqs = append(reqs, request)
+		reqs[i] = request
 	}
 
 	respch := grabClient.DoBatch(concurrency, reqs...)
@@ -287,7 +289,6 @@ func extractTSURLPrefix(m3u8url string) string {
 func getPlayInfo(client *geektime.Client, playInfoURL, quality string) (vod.PlayInfo, error) {
 	var getPlayInfoResp GetPlayInfoResponse
 	var playInfo vod.PlayInfo
-	client.BaseURL = geektime.GeekBangUniversityBaseURL
 	_, err := client.HTTPClient.R().
 		SetResult(&getPlayInfoResp).
 		Get(playInfoURL)

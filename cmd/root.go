@@ -18,7 +18,6 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/cavaliergopher/grab/v3"
-	"github.com/chromedp/chromedp"
 	"github.com/manifoldco/promptui"
 	"github.com/nicoxiang/geektime-downloader/internal/audio"
 	"github.com/nicoxiang/geektime-downloader/internal/config"
@@ -42,6 +41,7 @@ var (
 	downloadComments   bool
 	sourceType         int //video source type
 	columnOutputType   int
+	waitSeconds        int
 	productTypeOptions = make([]productTypeSelectOption, 4)
 	geektimeClient     *geektime.Client
 	accountClient      *geektime.Client
@@ -70,6 +70,7 @@ func init() {
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
 	rootCmd.Flags().IntVar(&columnOutputType, "output", 1, "专栏的输出内容(1pdf,2markdown,4audio)可自由组合")
+	rootCmd.Flags().IntVar(&waitSeconds, "wait-seconds", 8, "Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒")
 
 	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcid")
 	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcess")
@@ -332,20 +333,9 @@ func handleDownloadAll(ctx context.Context) {
 		total := len(currentProduct.Articles)
 		var i int
 
-		var chromedpCtx context.Context
-		var cancel context.CancelFunc
-
 		needDownloadPDF := columnOutputType&1 == 1
 		needDownloadMD := (columnOutputType>>1)&1 == 1
 		needDownloadAudio := (columnOutputType>>2)&1 == 1
-
-		if needDownloadPDF {
-			chromedpCtx, cancel = chromedp.NewContext(ctx)
-			// start the browser
-			err := chromedp.Run(chromedpCtx)
-			checkError(err)
-			defer cancel()
-		}
 
 		for _, a := range currentProduct.Articles {
 			fileName := filenamify.Filenamify(a.Title)
@@ -369,16 +359,15 @@ func handleDownloadAll(ctx context.Context) {
 			checkError(err)
 
 			if needDownloadPDF {
-				err = pdf.PrintArticlePageToPDF(chromedpCtx,
+				err = pdf.PrintArticlePageToPDF(ctx,
 					a.AID,
 					projectDir,
 					a.Title,
 					geektimeClient.Cookies,
 					downloadComments,
+					waitSeconds,
 				)
 				if err != nil {
-					// ensure chrome killed before os exit
-					cancel()
 					checkError(err)
 				}
 
@@ -461,22 +450,17 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		sp.Start()
 
 		if needDownloadPDF {
-			chromedpCtx, cancel := chromedp.NewContext(ctx)
-			// start the browser
-			err = chromedp.Run(chromedpCtx)
 			checkError(err)
-			defer cancel()
-			err = pdf.PrintArticlePageToPDF(chromedpCtx,
+			err = pdf.PrintArticlePageToPDF(ctx,
 				article.AID,
 				projectDir,
 				article.Title,
 				geektimeClient.Cookies,
 				downloadComments,
+				waitSeconds,
 			)
 			if err != nil {
 				sp.Stop()
-				// ensure chrome killed before os exit
-				cancel()
 				checkError(err)
 			}
 

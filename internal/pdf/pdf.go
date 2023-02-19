@@ -28,6 +28,7 @@ func PrintArticlePageToPDF(ctx context.Context,
 	title string,
 	cookies []*http.Cookie,
 	downloadComments bool,
+	waitSeconds int,
 ) error {
 	rateLimit := false
 	// new tab
@@ -54,7 +55,7 @@ func PrintArticlePageToPDF(ctx context.Context,
 			chromedp.Emulate(device.IPadPro11),
 			setCookies(cookies),
 			chromedp.Navigate(geektime.DefaultBaseURL + `/column/article/` + strconv.Itoa(aid)),
-			waitForImagesLoad(),
+			chromedp.Sleep(time.Duration(waitSeconds) * time.Second),
 			hideRedundantElements(downloadComments),
 			printToPDF(&buf),
 		},
@@ -175,12 +176,6 @@ func printToPDF(res *[]byte) chromedp.ActionFunc {
 		}
 		*res = data
 		return nil
-	})
-}
-
-func waitForImagesLoad() chromedp.ActionFunc {
-	return chromedp.ActionFunc(func(ctx context.Context) error {
-		return waitFor(ctx, "networkAlmostIdle")
 	})
 }
 
