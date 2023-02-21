@@ -102,12 +102,17 @@ func writeImageFile(ctx context.Context,
 ) (err error) {
 	reqs := make([]*grab.Request, len(imageURLs))
 	for i, imageURL := range imageURLs {
-		dst := filepath.Join(imagesFolder, imageURL)
-		request, _ := grab.NewRequest(dst, imageURL)
+		segments := strings.Split(imageURL, "/")
+		f := segments[len(segments)-1]
+		if i := strings.Index(f, "?"); i > 0 {
+			f = f[:i]
+		}
+		imageLocalFullPath := filepath.Join(imagesFolder, f)
+		request, _ := grab.NewRequest(imageLocalFullPath, imageURL)
 		request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
 		request = request.WithContext(ctx)
 		reqs[i] = request
-		rel, _ := filepath.Rel(dir, dst)
+		rel, _ := filepath.Rel(dir, imageLocalFullPath)
 		ms.ReplaceAll(imageURL, filepath.ToSlash(rel))
 	}
 	respch := grabClient.DoBatch(concurrency, reqs...)
