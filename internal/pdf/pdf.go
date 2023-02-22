@@ -178,34 +178,3 @@ func printToPDF(res *[]byte) chromedp.ActionFunc {
 		return nil
 	})
 }
-
-// waitFor blocks until eventName is received.
-// Examples of events you can wait for:
-//     init, DOMContentLoaded, firstPaint,
-//     firstContentfulPaint, firstImagePaint,
-//     firstMeaningfulPaintCandidate,
-//     load, networkAlmostIdle, firstMeaningfulPaint, networkIdle
-//
-// This is not super reliable, I've already found incidental cases where
-// networkIdle was sent before load. It's probably smart to see how
-// puppeteer implements this exactly.
-func waitFor(ctx context.Context, eventName string) error {
-	ch := make(chan struct{})
-	cctx, cancel := context.WithCancel(ctx)
-	chromedp.ListenTarget(cctx, func(ev interface{}) {
-		switch e := ev.(type) {
-		case *page.EventLifecycleEvent:
-			if e.Name == eventName {
-				cancel()
-				close(ch)
-			}
-		}
-	})
-
-	select {
-	case <-ch:
-		return nil
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-}
