@@ -153,13 +153,13 @@ type V3ProductInfoResponse struct {
 			// 	} `json:"article"`
 			// } `json:"qconp"`
 			// FavQrcode string `json:"fav_qrcode"`
-			// Extra     struct {
-			// 	Sub struct {
-			// 		Count      int  `json:"count"`
-			// 		HadDone    bool `json:"had_done"`
-			// 		CouldOrder bool `json:"could_order"`
-			// 		AccessMask int  `json:"access_mask"`
-			// 	} `json:"sub"`
+			Extra     struct {
+				Sub struct {
+					Count      int  `json:"count"`
+					HadDone    bool `json:"had_done"`
+					CouldOrder bool `json:"could_order"`
+					AccessMask int  `json:"access_mask"`
+				} `json:"sub"`
 			// 	Fav struct {
 			// 		Count   int  `json:"count"`
 			// 		HadDone bool `json:"had_done"`
@@ -284,7 +284,7 @@ type V3ProductInfoResponse struct {
 			// 		Rules         interface{} `json:"rules"`
 			// 	} `json:"vip_promo"`
 			// 	IsTgoTicket bool `json:"is_tgo_ticket"`
-			// } `json:"extra"`
+			} `json:"extra"`
 			// AvailableCoupons interface{} `json:"available_coupons"`
 			InPvip           int         `json:"in_pvip"`
 		} `json:"info"`

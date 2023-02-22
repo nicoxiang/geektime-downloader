@@ -9,14 +9,13 @@ import (
 	"github.com/manifoldco/promptui"
 	"github.com/nicoxiang/geektime-downloader/internal/config"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
-	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 func checkError(err error) {
 	if err != nil {
 		// special newline case
-		if errors.Is(err, pgt.ErrGeekTimeRateLimit) ||
+		if errors.Is(err, geektime.ErrGeekTimeRateLimit) ||
 			os.IsTimeout(err) {
 			fmt.Println()
 		}
@@ -31,8 +30,8 @@ func checkError(err error) {
 		} else if errors.Is(err, geektime.ErrWrongPassword) ||
 			errors.Is(err, geektime.ErrTooManyLoginAttemptTimes) {
 			exitWithMsg(err.Error())
-		} else if errors.Is(err, pgt.ErrGeekTimeRateLimit) ||
-			errors.Is(err, pgt.ErrAuthFailed) {
+		} else if errors.Is(err, geektime.ErrGeekTimeRateLimit) ||
+			errors.Is(err, geektime.ErrAuthFailed) {
 			exitAndRemoveConfig(err)
 		} else if os.IsTimeout(err) {
 			logger.Error(err, "Request Timeout")

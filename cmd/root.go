@@ -17,7 +17,7 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
-	"github.com/chromedp/chromedp"
+	"github.com/cavaliergopher/grab/v3"
 	"github.com/manifoldco/promptui"
 	"github.com/nicoxiang/geektime-downloader/internal/audio"
 	"github.com/nicoxiang/geektime-downloader/internal/config"
@@ -25,7 +25,6 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/markdown"
 	"github.com/nicoxiang/geektime-downloader/internal/pdf"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
-	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/video"
 	"github.com/spf13/cobra"
 )
@@ -42,7 +41,12 @@ var (
 	downloadComments   bool
 	sourceType         int //video source type
 	columnOutputType   int
+	waitSeconds        int
 	productTypeOptions = make([]productTypeSelectOption, 4)
+	geektimeClient     *geektime.Client
+	accountClient      *geektime.Client
+	universityClient   *geektime.Client
+	grabClient         *grab.Client
 )
 
 type productTypeSelectOption struct {
@@ -66,12 +70,16 @@ func init() {
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
 	rootCmd.Flags().IntVar(&columnOutputType, "output", 1, "专栏的输出内容(1pdf,2markdown,4audio)可自由组合")
+	rootCmd.Flags().IntVar(&waitSeconds, "wait-seconds", 8, "Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒")
 
 	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcid")
 	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcess")
 	rootCmd.MarkFlagsRequiredTogether("gcid", "gcess")
 
 	sp = spinner.New(spinner.CharSets[4], 100*time.Millisecond)
+	accountClient = geektime.NewAccountClient()
+	grabClient = grab.NewClient()
+	grabClient.UserAgent = geektime.DefaultUserAgent
 }
 
 var rootCmd = &cobra.Command{
@@ -110,7 +118,7 @@ var rootCmd = &cobra.Command{
 			checkError(err)
 			sp.Prefix = "[ 正在登录... ]"
 			sp.Start()
-			readCookies, err = geektime.Login(phone, pwd)
+			readCookies, err = accountClient.Login(phone, pwd)
 			if err != nil {
 				sp.Stop()
 				checkError(err)
@@ -120,13 +128,13 @@ var rootCmd = &cobra.Command{
 			sp.Stop()
 			fmt.Fprintln(os.Stderr, "登录成功")
 		}
-		geektime.InitClient(readCookies)
 
 		// first time auth check
-		if err := geektime.Auth(); err != nil {
-			checkError(pgt.ErrAuthFailed)
+		if err := accountClient.Auth(readCookies); err != nil {
+			checkError(err)
 		}
-
+		geektimeClient = geektime.NewClient(readCookies)
+		universityClient = geektime.NewUniversityClient(readCookies)
 		selectProductType(cmd.Context())
 	},
 }
@@ -180,14 +188,21 @@ func letInputProductID(ctx context.Context) {
 		// when source type is daily lesson or qconplus,
 		// input id means product id
 		// download video directly
-		productInfo, err := geektime.PostV3ProductInfo(id)
+		productInfo, err := geektimeClient.ProductInfo(id)
 		checkError(err)
+
+		if productInfo.Data.Info.Extra.Sub.AccessMask == 0 {
+			fmt.Fprint(os.Stderr, "尚未购买该课程\n")
+			letInputProductID(ctx)
+		}
 
 		if checkProductType(productInfo.Data.Info.Type, sourceType) {
 			projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, productInfo.Data.Info.Title)
 			checkError(err)
 
 			err = video.DownloadArticleVideo(ctx,
+				geektimeClient,
+				grabClient,
 				productInfo.Data.Info.Article.ID,
 				sourceType,
 				projectDir,
@@ -206,11 +221,11 @@ func loadProduct(ctx context.Context, productID int) {
 	var p geektime.Product
 	var err error
 	if sourceType == 5 {
-		p, err = geektime.GetMyClassProduct(productID)
+		p, err = universityClient.MyClassProduct(productID)
 		// university don't need check product type
 		// if input invalid id, access mark is 0
 	} else if sourceType == 1 {
-		p, err = geektime.PostV3ColumnInfo(productID)
+		p, err = geektimeClient.ColumnInfo(productID)
 		if err == nil {
 			c := checkProductType(p.Type, sourceType)
 			// if check product type fail, re-input product
@@ -323,20 +338,9 @@ func handleDownloadAll(ctx context.Context) {
 		total := len(currentProduct.Articles)
 		var i int
 
-		var chromedpCtx context.Context
-		var cancel context.CancelFunc
-
 		needDownloadPDF := columnOutputType&1 == 1
 		needDownloadMD := (columnOutputType>>1)&1 == 1
 		needDownloadAudio := (columnOutputType>>2)&1 == 1
-
-		if needDownloadPDF {
-			chromedpCtx, cancel = chromedp.NewContext(ctx)
-			// start the browser
-			err := chromedp.Run(chromedpCtx)
-			checkError(err)
-			defer cancel()
-		}
 
 		for _, a := range currentProduct.Articles {
 			fileName := filenamify.Filenamify(a.Title)
@@ -356,20 +360,19 @@ func handleDownloadAll(ctx context.Context) {
 				continue
 			}
 
-			articleInfo, err := geektime.GetArticleInfo(a.AID)
+			articleInfo, err := geektimeClient.V1ArticleInfo(a.AID)
 			checkError(err)
 
 			if needDownloadPDF {
-				err = pdf.PrintArticlePageToPDF(chromedpCtx,
+				err = pdf.PrintArticlePageToPDF(ctx,
 					a.AID,
 					projectDir,
 					a.Title,
-					geektime.SiteCookies,
+					geektimeClient.Cookies,
 					downloadComments,
+					waitSeconds,
 				)
 				if err != nil {
-					// ensure chrome killed before os exit
-					cancel()
 					checkError(err)
 				}
 
@@ -378,16 +381,22 @@ func handleDownloadAll(ctx context.Context) {
 					for i, v := range articleInfo.Data.InlineVideoSubtitles {
 						videoURLs[i] = v.VideoURL
 					}
-					err = video.DownloadMP4(ctx, a.Title, projectDir, videoURLs)
+					err = video.DownloadMP4(ctx, grabClient, a.Title, projectDir, videoURLs)
 				}
 			}
 
 			if needDownloadMD {
-				err = markdown.Download(ctx, articleInfo.Data.ArticleContent, a.Title, projectDir, a.AID, concurrency)
+				err = markdown.Download(ctx,
+					grabClient,
+					articleInfo.Data.ArticleContent,
+					a.Title,
+					projectDir,
+					a.AID,
+					concurrency)
 			}
 
 			if needDownloadAudio {
-				err = audio.DownloadAudio(ctx, articleInfo.Data.AudioDownloadURL, projectDir, a.Title)
+				err = audio.DownloadAudio(ctx, grabClient, articleInfo.Data.AudioDownloadURL, projectDir, a.Title)
 			}
 
 			checkError(err)
@@ -403,10 +412,10 @@ func handleDownloadAll(ctx context.Context) {
 				continue
 			}
 			if sourceType == 1 {
-				err := video.DownloadArticleVideo(ctx, a.AID, sourceType, projectDir, quality, concurrency)
+				err := video.DownloadArticleVideo(ctx, geektimeClient, grabClient, a.AID, sourceType, projectDir, quality, concurrency)
 				checkError(err)
 			} else if sourceType == 5 {
-				err := video.DownloadUniversityVideo(ctx, a.AID, currentProduct, projectDir, quality, concurrency)
+				err := video.DownloadUniversityVideo(ctx, universityClient, grabClient, a.AID, currentProduct, projectDir, quality, concurrency)
 				checkError(err)
 			}
 		}
@@ -423,7 +432,7 @@ func loadArticles() {
 	if len(currentProduct.Articles) <= 0 {
 		sp.Prefix = "[ 正在加载文章列表... ]"
 		sp.Start()
-		articles, err := geektime.PostV1ColumnArticles(strconv.Itoa(currentProduct.ID))
+		articles, err := geektimeClient.ColumnArticles(strconv.Itoa(currentProduct.ID))
 		checkError(err)
 		currentProduct.Articles = articles
 		sp.Stop()
@@ -436,7 +445,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		needDownloadMD := (columnOutputType>>1)&1 == 1
 		needDownloadAudio := (columnOutputType>>2)&1 == 1
 
-		articleInfo, err := geektime.GetArticleInfo(article.AID)
+		articleInfo, err := geektimeClient.V1ArticleInfo(article.AID)
 		checkError(err)
 
 		sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》... ]", article.Title)
@@ -446,22 +455,17 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		sp.Start()
 
 		if needDownloadPDF {
-			chromedpCtx, cancel := chromedp.NewContext(ctx)
-			// start the browser
-			err = chromedp.Run(chromedpCtx)
 			checkError(err)
-			defer cancel()
-			err = pdf.PrintArticlePageToPDF(chromedpCtx,
+			err = pdf.PrintArticlePageToPDF(ctx,
 				article.AID,
 				projectDir,
 				article.Title,
-				geektime.SiteCookies,
+				geektimeClient.Cookies,
 				downloadComments,
+				waitSeconds,
 			)
 			if err != nil {
 				sp.Stop()
-				// ensure chrome killed before os exit
-				cancel()
 				checkError(err)
 			}
 
@@ -470,26 +474,32 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 				for i, v := range articleInfo.Data.InlineVideoSubtitles {
 					videoURLs[i] = v.VideoURL
 				}
-				err = video.DownloadMP4(ctx, article.Title, projectDir, videoURLs)
+				err = video.DownloadMP4(ctx, grabClient, article.Title, projectDir, videoURLs)
 			}
 		}
 
 		if needDownloadMD {
-			err = markdown.Download(ctx, articleInfo.Data.ArticleContent, article.Title, projectDir, article.AID, concurrency)
+			err = markdown.Download(ctx,
+				grabClient,
+				articleInfo.Data.ArticleContent,
+				article.Title,
+				projectDir,
+				article.AID,
+				concurrency)
 		}
 
 		if needDownloadAudio {
-			err = audio.DownloadAudio(ctx, articleInfo.Data.AudioDownloadURL, projectDir, article.Title)
+			err = audio.DownloadAudio(ctx, grabClient, articleInfo.Data.AudioDownloadURL, projectDir, article.Title)
 		}
 
 		sp.Stop()
 		checkError(err)
 	} else if isVideo() {
 		if sourceType == 1 {
-			err := video.DownloadArticleVideo(ctx, article.AID, sourceType, projectDir, quality, concurrency)
+			err := video.DownloadArticleVideo(ctx, geektimeClient, grabClient, article.AID, sourceType, projectDir, quality, concurrency)
 			checkError(err)
 		} else if sourceType == 5 {
-			err := video.DownloadUniversityVideo(ctx, article.AID, currentProduct, projectDir, quality, concurrency)
+			err := video.DownloadUniversityVideo(ctx, universityClient, grabClient, article.AID, currentProduct, projectDir, quality, concurrency)
 			checkError(err)
 		}
 	}
@@ -514,14 +524,14 @@ func readCookiesFromInput() []*http.Cookie {
 	oneyear := time.Now().Add(180 * 24 * time.Hour)
 	cookies := make([]*http.Cookie, 2)
 	m := make(map[string]string, 2)
-	m[pgt.GCID] = gcid
-	m[pgt.GCESS] = gcess
+	m[geektime.GCID] = gcid
+	m[geektime.GCESS] = gcess
 	c := 0
 	for k, v := range m {
 		cookies[c] = &http.Cookie{
 			Name:     k,
 			Value:    v,
-			Domain:   pgt.GeekBangCookieDomain,
+			Domain:   geektime.GeekBangCookieDomain,
 			HttpOnly: true,
 			Expires:  oneyear,
 		}

@@ -57,6 +57,7 @@ Flags:
       --output int       专栏的输出内容(1pdf,2markdown,4audio)可自由组合 (default 1)
   -u, --phone string     你的极客时间账号(手机号)
   -q, --quality string   下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
+      --wait-seconds int   Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒 (default 8)
 ```
 
 ## Note
@@ -98,6 +99,9 @@ https://time.geekbang.org/dailylesson/detail/100122405
 ```
 https://time.geekbang.org/qconplus/detail/100110494
 ```
+
+### 为什么我下载的PDF是空白页?
+首先下载课程请保证VPN已关闭。在此前提下如果仍然出现空白页情况，说明后台Chrome网页加载速度较慢，可以尝试加大--wait-seconds参数，保证页面完全加载完成后再开始生成PDF。
 
 ### 如何下载专栏的 Markdown 格式和文章音频?
 

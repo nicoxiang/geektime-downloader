@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	pgt "github.com/nicoxiang/geektime-downloader/internal/pkg/geektime"
+	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 )
 
 const (
@@ -58,7 +58,7 @@ func ReadCookieFromConfigFile(phone string) ([]*http.Cookie, error) {
 				cookies = append(cookies, &http.Cookie{
 					Name:     s[0],
 					Value:    s[1],
-					Domain:   pgt.GeekBangCookieDomain,
+					Domain:   geektime.GeekBangCookieDomain,
 					HttpOnly: true,
 					Expires:  oneyear,
 				})
