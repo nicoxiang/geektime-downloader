@@ -191,6 +191,11 @@ func letInputProductID(ctx context.Context) {
 		productInfo, err := geektimeClient.ProductInfo(id)
 		checkError(err)
 
+		if productInfo.Data.Info.Extra.Sub.AccessMask == 0 {
+			fmt.Fprint(os.Stderr, "尚未购买该课程\n")
+			letInputProductID(ctx)
+		}
+
 		if checkProductType(productInfo.Data.Info.Type, sourceType) {
 			projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, productInfo.Data.Info.Title)
 			checkError(err)

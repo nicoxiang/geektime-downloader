@@ -193,21 +193,24 @@ func (c *Client) Auth(cs []*http.Cookie) error {
 		Code int `json:"code"`
 	}
 	t := fmt.Sprintf("%v", time.Now().Round(time.Millisecond).UnixNano()/(int64(time.Millisecond)/int64(time.Nanosecond)))
-	c.HTTPClient.Cookies = cs
-	params := make(map[string]string, 1)
+	c.HTTPClient.SetCookies(cs)
+	params := make(map[string]string, 2)
 	params["t"] = t
-	r := c.newRequest(resty.MethodPost,
+	params["v_t"] = t
+	r := c.newRequest(resty.MethodGet,
 		V1AuthPath,
 		params,
 		nil,
-		&res,
+		res,
 	)
-	_, err := r.Execute(r.Method, r.URL)
+	r.SetHeader(Origin, DefaultBaseURL)
+	_, err := do(r)
 
 	if err != nil {
 		return err
 	}
 
+	
 	if res.Code != 0 {
 		// result Code -1
 		// {\"error\":{\"msg\":\"未登录\",\"code\":-2000}
@@ -417,7 +420,7 @@ func (c *Client) newRequest(method, url string, params map[string]string, body i
 	r.URL = c.BaseURL + url
 	r.SetHeader(Origin, c.BaseURL)
 	if len(params) > 0 {
-		r.SetPathParams(params)
+		r.SetQueryParams(params)
 	}
 	if body != nil {
 		r.SetBody(body)
@@ -436,6 +439,7 @@ func do(r *resty.Request) (*resty.Response, error) {
 	if resp.RawResponse.StatusCode == 451 {
 		return nil, ErrGeekTimeRateLimit
 	} else if resp.RawResponse.StatusCode == 452 {
+		fmt.Println("452")
 		return nil, ErrAuthFailed
 	}
 

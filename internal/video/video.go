@@ -60,6 +60,9 @@ func DownloadArticleVideo(ctx context.Context,
 	if err != nil {
 		return err
 	}
+	if articleInfo.Data.Info.Video.ID == "" {
+		return  nil
+	}
 	playAuth, err := client.VideoPlayAuth(articleInfo.Data.Info.ID, sourceType, articleInfo.Data.Info.Video.ID)
 	if err != nil {
 		return err
