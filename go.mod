@@ -4,7 +4,8 @@ go 1.18
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.3.6
-	github.com/briandowns/spinner v1.19.0
+	github.com/briandowns/spinner v1.21.0
+	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/cheggaaa/pb/v3 v3.1.0
 	github.com/chromedp/cdproto v0.0.0-20230109101555-6b041c6303cc
 	github.com/chromedp/chromedp v0.8.7
@@ -12,14 +13,12 @@ require (
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/google/uuid v1.3.0
 	github.com/spf13/cobra v1.6.1
-	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 )
 
 require (
 	github.com/PuerkitoBio/goquery v1.8.0 // indirect
 	github.com/VividCortex/ewma v1.1.1 // indirect
 	github.com/andybalholm/cascadia v1.3.1 // indirect
-	github.com/cavaliergopher/grab/v3 v3.0.1 // indirect
 	github.com/chromedp/sysutil v1.0.0 // indirect
 	github.com/fatih/color v1.13.0 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
@@ -34,6 +33,7 @@ require (
 	github.com/stretchr/testify v1.7.1 // indirect
 	golang.org/x/net v0.0.0-20220909164309-bea034e7d591 // indirect
 	golang.org/x/sys v0.0.0-20220928140112-f11e5e49a4ec // indirect
+	golang.org/x/term v0.1.0 // indirect
 )
 
 require (
