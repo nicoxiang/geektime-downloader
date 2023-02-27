@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.3.6
-	github.com/briandowns/spinner v1.21.0
+	github.com/briandowns/spinner v1.22.0
 	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/cheggaaa/pb/v3 v3.1.0
 	github.com/chromedp/cdproto v0.0.0-20230109101555-6b041c6303cc
