@@ -8,7 +8,7 @@ require (
 	github.com/cavaliergopher/grab/v3 v3.0.1
 	github.com/cheggaaa/pb/v3 v3.1.2
 	github.com/chromedp/cdproto v0.0.0-20230220211738-2b1ec77315c9
-	github.com/chromedp/chromedp v0.8.8
+	github.com/chromedp/chromedp v0.9.1
 	github.com/chzyer/readline v1.5.1
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/google/uuid v1.3.0
