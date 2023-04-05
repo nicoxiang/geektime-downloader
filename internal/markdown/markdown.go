@@ -84,9 +84,8 @@ func findAllImages(md string) (images []string) {
 			_, err := url.Parse(s)
 			if err == nil {
 				images = append(images, s)
-			} else {
-				// sometime exists broken image url, just ignore
 			}
+			// sometime exists broken image url, just ignore
 		}
 	}
 	return
