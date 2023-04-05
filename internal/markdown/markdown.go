@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"context"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -79,7 +80,13 @@ func Download(ctx context.Context, grabClient *grab.Client, html, title, dir str
 func findAllImages(md string) (images []string) {
 	for _, matches := range imgRegexp.FindAllStringSubmatch(md, -1) {
 		if len(matches) == 3 {
-			images = append(images, matches[2])
+			s := matches[2]
+			_, err := url.Parse(s)
+			if err == nil {
+				images = append(images, s)
+			} else {
+				// sometime exists broken image url, just ignore
+			}
 		}
 	}
 	return

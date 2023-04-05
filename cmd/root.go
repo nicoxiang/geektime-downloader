@@ -27,6 +27,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
 	"github.com/nicoxiang/geektime-downloader/internal/video"
 	"github.com/spf13/cobra"
+	"golang.org/x/net/html"
 )
 
 var (
@@ -363,6 +364,20 @@ func handleDownloadAll(ctx context.Context) {
 			articleInfo, err := geektimeClient.V1ArticleInfo(a.AID)
 			checkError(err)
 
+			hasVideo, videoURL := getVideoURLFromArticleContent(articleInfo.Data.ArticleContent)
+
+			if hasVideo && videoURL != "" {
+				err = video.DownloadMP4(ctx, grabClient, a.Title, projectDir, []string{videoURL})
+			}
+
+			if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
+				videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
+				for i, v := range articleInfo.Data.InlineVideoSubtitles {
+					videoURLs[i] = v.VideoURL
+				}
+				err = video.DownloadMP4(ctx, grabClient, a.Title, projectDir, videoURLs)
+			}
+
 			if needDownloadPDF {
 				err = pdf.PrintArticlePageToPDF(ctx,
 					a.AID,
@@ -374,14 +389,6 @@ func handleDownloadAll(ctx context.Context) {
 				)
 				if err != nil {
 					checkError(err)
-				}
-
-				if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
-					videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
-					for i, v := range articleInfo.Data.InlineVideoSubtitles {
-						videoURLs[i] = v.VideoURL
-					}
-					err = video.DownloadMP4(ctx, grabClient, a.Title, projectDir, videoURLs)
 				}
 			}
 
@@ -449,10 +456,23 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		checkError(err)
 
 		sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》... ]", article.Title)
-		if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
+		hasVideo, videoURL := getVideoURLFromArticleContent(articleInfo.Data.ArticleContent)
+		if len(articleInfo.Data.InlineVideoSubtitles) > 0 || hasVideo && videoURL != "" {
 			sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》, 该文章中包含视频, 请耐心等待... ]", article.Title)
 		}
 		sp.Start()
+
+		if hasVideo && videoURL != "" {
+			err = video.DownloadMP4(ctx, grabClient, article.Title, projectDir, []string{videoURL})
+		}
+
+		if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
+			videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
+			for i, v := range articleInfo.Data.InlineVideoSubtitles {
+				videoURLs[i] = v.VideoURL
+			}
+			err = video.DownloadMP4(ctx, grabClient, article.Title, projectDir, videoURLs)
+		}
 
 		if needDownloadPDF {
 			checkError(err)
@@ -467,14 +487,6 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 			if err != nil {
 				sp.Stop()
 				checkError(err)
-			}
-
-			if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
-				videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
-				for i, v := range articleInfo.Data.InlineVideoSubtitles {
-					videoURLs[i] = v.VideoURL
-				}
-				err = video.DownloadMP4(ctx, grabClient, article.Title, projectDir, videoURLs)
 			}
 		}
 
@@ -577,6 +589,43 @@ func checkProductType(productType string, sourceType int) bool {
 	}
 	fmt.Fprint(os.Stderr, "\r输入的课程 ID 有误\n")
 	return false
+}
+
+// Sometime video exist in article content, see issue #104
+// <p>
+// <video poster="https://static001.geekbang.org/resource/image/6a/f7/6ada085b44eddf37506b25ad188541f7.jpg" preload="none" controls="">
+// <source src="https://media001.geekbang.org/customerTrans/fe4a99b62946f2c31c2095c167b26f9c/30d99c0d-16d14089303-0000-0000-01d-dbacd.mp4" type="video/mp4">
+// <source src="https://media001.geekbang.org/2ce11b32e3e740ff9580185d8c972303/a01ad13390fe4afe8856df5fb5d284a2-f2f547049c69fa0d4502ab36d42ea2fa-sd.m3u8" type="application/x-mpegURL">
+// <source src="https://media001.geekbang.org/2ce11b32e3e740ff9580185d8c972303/a01ad13390fe4afe8856df5fb5d284a2-2528b0077e78173fd8892de4d7b8c96d-hd.m3u8" type="application/x-mpegURL"></video>
+// </p>
+func getVideoURLFromArticleContent(content string) (hasVideo bool, videoURL string) {
+	if !strings.Contains(content, "<video") || !strings.Contains(content, "<source") {
+		return false, ""
+	}
+	doc, err := html.Parse(strings.NewReader(content))
+	if err != nil {
+		return false, ""
+	}
+	hasVideo, videoURL = false, ""
+	var f func(*html.Node)
+	f = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "video" {
+			hasVideo = true
+		}
+		if n.Type == html.ElementNode && n.Data == "source" {
+			for _, a := range n.Attr {
+				if a.Key == "src" && hasVideo && strings.HasSuffix(a.Val, ".mp4") {
+					videoURL = a.Val
+					break
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			f(c)
+		}
+	}
+	f(doc)
+	return hasVideo, videoURL
 }
 
 func findProductTypeText(sourceType int) string {

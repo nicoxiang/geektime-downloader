@@ -204,14 +204,13 @@ func (c *Client) Auth(cs []*http.Cookie) error {
 		res,
 	)
 	r.SetHeader(Origin, DefaultBaseURL)
-	_, err := do(r)
+	resp, err := r.Execute(r.Method, r.URL)
 
 	if err != nil {
 		return err
 	}
 
-	
-	if res.Code != 0 {
+	if resp.RawResponse.StatusCode == 452 || res.Code != 0 {
 		// result Code -1
 		// {\"error\":{\"msg\":\"未登录\",\"code\":-2000}
 		return ErrAuthFailed
@@ -439,7 +438,6 @@ func do(r *resty.Request) (*resty.Response, error) {
 	if resp.RawResponse.StatusCode == 451 {
 		return nil, ErrGeekTimeRateLimit
 	} else if resp.RawResponse.StatusCode == 452 {
-		fmt.Println("452")
 		return nil, ErrAuthFailed
 	}
 
