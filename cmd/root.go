@@ -17,7 +17,6 @@ import (
 	"time"
 
 	"github.com/briandowns/spinner"
-	"github.com/cavaliergopher/grab/v3"
 	"github.com/manifoldco/promptui"
 	"github.com/nicoxiang/geektime-downloader/internal/audio"
 	"github.com/nicoxiang/geektime-downloader/internal/config"
@@ -47,7 +46,6 @@ var (
 	geektimeClient     *geektime.Client
 	accountClient      *geektime.Client
 	universityClient   *geektime.Client
-	grabClient         *grab.Client
 )
 
 type productTypeSelectOption struct {
@@ -79,8 +77,6 @@ func init() {
 
 	sp = spinner.New(spinner.CharSets[4], 100*time.Millisecond)
 	accountClient = geektime.NewAccountClient()
-	grabClient = grab.NewClient()
-	grabClient.UserAgent = geektime.DefaultUserAgent
 }
 
 var rootCmd = &cobra.Command{
@@ -203,7 +199,6 @@ func letInputProductID(ctx context.Context) {
 
 			err = video.DownloadArticleVideo(ctx,
 				geektimeClient,
-				grabClient,
 				productInfo.Data.Info.Article.ID,
 				sourceType,
 				projectDir,
@@ -367,7 +362,7 @@ func handleDownloadAll(ctx context.Context) {
 			hasVideo, videoURL := getVideoURLFromArticleContent(articleInfo.Data.ArticleContent)
 
 			if hasVideo && videoURL != "" {
-				err = video.DownloadMP4(ctx, grabClient, a.Title, projectDir, []string{videoURL})
+				err = video.DownloadMP4(ctx, a.Title, projectDir, []string{videoURL})
 			}
 
 			if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
@@ -375,7 +370,7 @@ func handleDownloadAll(ctx context.Context) {
 				for i, v := range articleInfo.Data.InlineVideoSubtitles {
 					videoURLs[i] = v.VideoURL
 				}
-				err = video.DownloadMP4(ctx, grabClient, a.Title, projectDir, videoURLs)
+				err = video.DownloadMP4(ctx, a.Title, projectDir, videoURLs)
 			}
 
 			if needDownloadPDF {
@@ -394,16 +389,14 @@ func handleDownloadAll(ctx context.Context) {
 
 			if needDownloadMD {
 				err = markdown.Download(ctx,
-					grabClient,
 					articleInfo.Data.ArticleContent,
 					a.Title,
 					projectDir,
-					a.AID,
-					concurrency)
+					a.AID)
 			}
 
 			if needDownloadAudio {
-				err = audio.DownloadAudio(ctx, grabClient, articleInfo.Data.AudioDownloadURL, projectDir, a.Title)
+				err = audio.DownloadAudio(ctx, articleInfo.Data.AudioDownloadURL, projectDir, a.Title)
 			}
 
 			checkError(err)
@@ -419,10 +412,10 @@ func handleDownloadAll(ctx context.Context) {
 				continue
 			}
 			if sourceType == 1 {
-				err := video.DownloadArticleVideo(ctx, geektimeClient, grabClient, a.AID, sourceType, projectDir, quality, concurrency)
+				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, sourceType, projectDir, quality, concurrency)
 				checkError(err)
 			} else if sourceType == 5 {
-				err := video.DownloadUniversityVideo(ctx, universityClient, grabClient, a.AID, currentProduct, projectDir, quality, concurrency)
+				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, currentProduct, projectDir, quality, concurrency)
 				checkError(err)
 			}
 		}
@@ -463,7 +456,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		sp.Start()
 
 		if hasVideo && videoURL != "" {
-			err = video.DownloadMP4(ctx, grabClient, article.Title, projectDir, []string{videoURL})
+			err = video.DownloadMP4(ctx, article.Title, projectDir, []string{videoURL})
 		}
 
 		if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
@@ -471,7 +464,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 			for i, v := range articleInfo.Data.InlineVideoSubtitles {
 				videoURLs[i] = v.VideoURL
 			}
-			err = video.DownloadMP4(ctx, grabClient, article.Title, projectDir, videoURLs)
+			err = video.DownloadMP4(ctx, article.Title, projectDir, videoURLs)
 		}
 
 		if needDownloadPDF {
@@ -492,26 +485,24 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 
 		if needDownloadMD {
 			err = markdown.Download(ctx,
-				grabClient,
 				articleInfo.Data.ArticleContent,
 				article.Title,
 				projectDir,
-				article.AID,
-				concurrency)
+				article.AID)
 		}
 
 		if needDownloadAudio {
-			err = audio.DownloadAudio(ctx, grabClient, articleInfo.Data.AudioDownloadURL, projectDir, article.Title)
+			err = audio.DownloadAudio(ctx, articleInfo.Data.AudioDownloadURL, projectDir, article.Title)
 		}
 
 		sp.Stop()
 		checkError(err)
 	} else if isVideo() {
 		if sourceType == 1 {
-			err := video.DownloadArticleVideo(ctx, geektimeClient, grabClient, article.AID, sourceType, projectDir, quality, concurrency)
+			err := video.DownloadArticleVideo(ctx, geektimeClient, article.AID, sourceType, projectDir, quality, concurrency)
 			checkError(err)
 		} else if sourceType == 5 {
-			err := video.DownloadUniversityVideo(ctx, universityClient, grabClient, article.AID, currentProduct, projectDir, quality, concurrency)
+			err := video.DownloadUniversityVideo(ctx, universityClient, article.AID, currentProduct, projectDir, quality, concurrency)
 			checkError(err)
 		}
 	}

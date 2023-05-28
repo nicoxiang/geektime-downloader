@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cavaliergopher/grab/v3"
 	"github.com/cheggaaa/pb/v3"
 	"github.com/google/uuid"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/crypto"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/downloader"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/m3u8"
 	"github.com/nicoxiang/geektime-downloader/internal/video/vod"
@@ -48,7 +48,6 @@ type GetPlayInfoResponse struct {
 // sourceType: normal video cource 1
 func DownloadArticleVideo(ctx context.Context,
 	client *geektime.Client,
-	grabClient *grab.Client,
 	articleID int,
 	sourceType int,
 	projectDir string,
@@ -61,7 +60,7 @@ func DownloadArticleVideo(ctx context.Context,
 		return err
 	}
 	if articleInfo.Data.Info.Video.ID == "" {
-		return  nil
+		return nil
 	}
 	playAuth, err := client.VideoPlayAuth(articleInfo.Data.Info.ID, sourceType, articleInfo.Data.Info.Video.ID)
 	if err != nil {
@@ -69,7 +68,6 @@ func DownloadArticleVideo(ctx context.Context,
 	}
 	return downloadAliyunVodEncryptVideo(ctx,
 		client,
-		grabClient,
 		playAuth,
 		articleInfo.Data.Info.Title,
 		projectDir,
@@ -81,7 +79,6 @@ func DownloadArticleVideo(ctx context.Context,
 // DownloadUniversityVideo ...
 func DownloadUniversityVideo(ctx context.Context,
 	client *geektime.Client,
-	grabClient *grab.Client,
 	articleID int,
 	currentProduct geektime.Product,
 	projectDir string,
@@ -96,7 +93,6 @@ func DownloadUniversityVideo(ctx context.Context,
 	videoTitle := getUniversityVideoTitle(articleID, currentProduct)
 	return downloadAliyunVodEncryptVideo(ctx,
 		client,
-		grabClient,
 		playAuthInfo.Data.PlayAuth,
 		videoTitle,
 		projectDir,
@@ -107,7 +103,6 @@ func DownloadUniversityVideo(ctx context.Context,
 
 func downloadAliyunVodEncryptVideo(ctx context.Context,
 	client *geektime.Client,
-	grabClient *grab.Client,
 	playAuth,
 	videoTitle,
 	projectDir,
@@ -131,40 +126,35 @@ func downloadAliyunVodEncryptVideo(ctx context.Context,
 		return err
 	}
 	decryptKey := crypto.GetAESDecryptKey(clientRand, playInfo.Rand, playInfo.Plaintext)
-	return download(ctx, grabClient, tsURLPrefix, videoTitle, projectDir, tsFileNames, []byte(decryptKey), playInfo.Size, AliyunVodEncrypt, concurrency)
+	return download(ctx, tsURLPrefix, videoTitle, projectDir, tsFileNames, []byte(decryptKey), playInfo.Size, AliyunVodEncrypt, concurrency)
 }
 
 // DownloadMP4 ...
-func DownloadMP4(ctx context.Context, grabClient *grab.Client, title, projectDir string, mp4URLs []string) (err error) {
+func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string) (err error) {
 	filenamifyTitle := filenamify.Filenamify(title)
 	videoDir := filepath.Join(projectDir, "videos", filenamifyTitle)
 	if err = os.MkdirAll(videoDir, os.ModePerm); err != nil {
 		return
 	}
 
-	reqs := make([]*grab.Request, len(mp4URLs))
-	for i, mp4URL := range mp4URLs {
+	for _, mp4URL := range mp4URLs {
 		u, _ := url.Parse(mp4URL)
 		dst := filepath.Join(videoDir, path.Base(u.Path))
-		request, _ := grab.NewRequest(dst, mp4URL)
-		request = request.WithContext(ctx)
-		request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
-		reqs[i] = request
-	}
 
-	respch := grabClient.DoBatch(0, reqs...)
+		headers := make(map[string]string, 2)
+		headers[geektime.Origin] = geektime.DefaultBaseURL
+		headers[geektime.UserAgent] = geektime.DefaultUserAgent
 
-	// check each response
-	for resp := range respch {
-		if err := resp.Err(); err != nil {
-			return err
+		_, err := downloader.DownloadFileConcurrently(ctx, dst, mp4URL, headers, 5)
+		if err != nil {
+			return nil
 		}
 	}
+
 	return
 }
 
 func download(ctx context.Context,
-	grabClient *grab.Client,
 	tsURLPrefix,
 	title,
 	projectDir string,
@@ -188,24 +178,20 @@ func download(ctx context.Context,
 	bar := newBar(size, fmt.Sprintf("[正在下载 %s] ", filenamifyTitle))
 	bar.Start()
 
-	reqs := make([]*grab.Request, len(tsFileNames))
-	for i, tsFileName := range tsFileNames {
+	for _, tsFileName := range tsFileNames {
 		u := tsURLPrefix + tsFileName
 		dst := filepath.Join(tempVideoDir, tsFileName)
-		request, _ := grab.NewRequest(dst, u)
-		request = request.WithContext(ctx)
-		request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
-		reqs[i] = request
-	}
-
-	respch := grabClient.DoBatch(concurrency, reqs...)
-
-	// check each response
-	for resp := range respch {
-		if err := resp.Err(); err != nil {
+		
+		headers := make(map[string]string, 2)
+		headers[geektime.Origin] = geektime.DefaultBaseURL
+		headers[geektime.UserAgent] = geektime.DefaultUserAgent
+		
+		fileSize, err := downloader.DownloadFileConcurrently(ctx, dst, u, headers, 5)
+		if err != nil {
 			return err
 		}
-		addBarValue(bar, resp.BytesComplete())
+
+		addBarValue(bar, fileSize)
 	}
 
 	bar.Finish()

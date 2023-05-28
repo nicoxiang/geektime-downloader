@@ -12,8 +12,8 @@ import (
 	"sync"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
-	"github.com/cavaliergopher/grab/v3"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/downloader"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
 )
 
@@ -37,7 +37,7 @@ func (ms *markdownString) ReplaceAll(o, n string) {
 }
 
 // Download ...
-func Download(ctx context.Context, grabClient *grab.Client, html, title, dir string, aid, concurrency int) error {
+func Download(ctx context.Context, html, title, dir string, aid int) error {
 	select {
 	case <-ctx.Done():
 		return context.Canceled
@@ -55,7 +55,7 @@ func Download(ctx context.Context, grabClient *grab.Client, html, title, dir str
 	// images/aid/imageName.png
 	imagesFolder := filepath.Join(dir, "images", strconv.Itoa(aid))
 
-	err = writeImageFile(ctx, grabClient, imageURLs, dir, imagesFolder, ss, concurrency)
+	err = writeImageFile(ctx, imageURLs, dir, imagesFolder, ss)
 
 	if err != nil {
 		return err
@@ -99,35 +99,31 @@ func getDefaultConverter() *md.Converter {
 }
 
 func writeImageFile(ctx context.Context,
-	grabClient *grab.Client,
 	imageURLs []string,
 	dir,
 	imagesFolder string,
 	ms *markdownString,
-	concurrency int,
 ) (err error) {
-	reqs := make([]*grab.Request, len(imageURLs))
-	for i, imageURL := range imageURLs {
+	for _, imageURL := range imageURLs {
 		segments := strings.Split(imageURL, "/")
 		f := segments[len(segments)-1]
 		if i := strings.Index(f, "?"); i > 0 {
 			f = f[:i]
 		}
 		imageLocalFullPath := filepath.Join(imagesFolder, f)
-		request, _ := grab.NewRequest(imageLocalFullPath, imageURL)
-		request.HTTPRequest.Header.Set(geektime.Origin, geektime.DefaultBaseURL)
-		request = request.WithContext(ctx)
-		reqs[i] = request
-		rel, _ := filepath.Rel(dir, imageLocalFullPath)
-		ms.ReplaceAll(imageURL, filepath.ToSlash(rel))
-	}
-	respch := grabClient.DoBatch(concurrency, reqs...)
 
-	// check each response
-	for resp := range respch {
-		if err := resp.Err(); err != nil {
+		headers := make(map[string]string, 2)
+		headers[geektime.Origin] = geektime.DefaultBaseURL
+		headers[geektime.UserAgent] = geektime.DefaultUserAgent
+
+		_, err := downloader.DownloadFileConcurrently(ctx, imageLocalFullPath, imageURL, headers, 1)
+
+		if err != nil {
 			return err
 		}
+
+		rel, _ := filepath.Rel(dir, imageLocalFullPath)
+		ms.ReplaceAll(imageURL, filepath.ToSlash(rel))
 	}
 	return nil
 }
