@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"context"
+	"errors"
 	"net/url"
 	"os"
 	"path"
@@ -54,6 +55,10 @@ func Download(ctx context.Context, html, title, dir string, aid int) error {
 
 	// images/aid/imageName.png
 	imagesFolder := filepath.Join(dir, "images", strconv.Itoa(aid))
+
+	if _, err := os.Stat(imagesFolder); errors.Is(err, os.ErrNotExist) {
+		os.MkdirAll(imagesFolder, os.ModePerm)
+	}
 
 	err = writeImageFile(ctx, imageURLs, dir, imagesFolder, ss)
 
