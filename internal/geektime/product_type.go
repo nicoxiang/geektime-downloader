@@ -14,4 +14,8 @@ const (
 	ProductTypeQCONPlus ProductType = "q"
 	// ProductTypeUniversityVideo 训练营视频，自定义类型
 	ProductTypeUniversityVideo ProductType = "u"
+	// ProductTypeOpenCourse 公开课(视频)
+	ProductTypeOpenCoureVideo ProductType = "p35"
+	// ProductTypeOpenCourse 公开课(文字)
+	ProductTypeOpenCoureText ProductType = "p29"
 )

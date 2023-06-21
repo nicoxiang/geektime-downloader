@@ -40,9 +40,10 @@ var (
 	quality            string
 	downloadComments   bool
 	sourceType         int //video source type
+	productTypeOption  productTypeSelectOption
 	columnOutputType   int
 	waitSeconds        int
-	productTypeOptions = make([]productTypeSelectOption, 4)
+	productTypeOptions = make([]productTypeSelectOption, 5)
 	geektimeClient     *geektime.Client
 	accountClient      *geektime.Client
 	universityClient   *geektime.Client
@@ -61,6 +62,7 @@ func init() {
 	productTypeOptions[1] = productTypeSelectOption{"每日一课", 2}
 	productTypeOptions[2] = productTypeSelectOption{"大厂案例", 4}
 	productTypeOptions[3] = productTypeSelectOption{"训练营", 5} //custom source type, not use
+	productTypeOptions[4] = productTypeSelectOption{"公开课", 1}
 
 	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)")
 	rootCmd.Flags().StringVar(&gcid, "gcid", "", "极客时间 cookie 值 gcid")
@@ -152,13 +154,14 @@ func selectProductType(ctx context.Context) {
 	}
 	index, _, err := prompt.Run()
 	checkError(err)
-	sourceType = productTypeOptions[index].Value
+	productTypeOption = productTypeOptions[index]
+	sourceType = productTypeOption.Value
 	letInputProductID(ctx)
 }
 
 func letInputProductID(ctx context.Context) {
 	prompt := promptui.Prompt{
-		Label: fmt.Sprintf("请输入%s的课程 ID", findProductTypeText(sourceType)),
+		Label: fmt.Sprintf("请输入%s的课程 ID", productTypeOption.Text),
 		Validate: func(s string) error {
 			if strings.TrimSpace(s) == "" {
 				return errors.New("课程 ID 不能为空")
@@ -509,12 +512,14 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 }
 
 func isText() bool {
-	return currentProduct.Type == string(geektime.ProductTypeColumn)
+	return currentProduct.Type == string(geektime.ProductTypeColumn) ||
+		currentProduct.Type == string(geektime.ProductTypeOpenCoureText)
 }
 
 func isVideo() bool {
 	return currentProduct.Type == string(geektime.ProductTypeNormalVideo) ||
-		currentProduct.Type == string(geektime.ProductTypeUniversityVideo)
+		currentProduct.Type == string(geektime.ProductTypeUniversityVideo) ||
+		currentProduct.Type == string(geektime.ProductTypeOpenCoureVideo)
 }
 
 // Sets the bit at pos in the integer n.
@@ -575,7 +580,9 @@ func checkProductType(productType string, sourceType int) bool {
 	if (productType == string(geektime.ProductTypeDailyLesson) && sourceType == 2) ||
 		(productType == string(geektime.ProductTypeQCONPlus) && sourceType == 4) ||
 		(productType == string(geektime.ProductTypeColumn) && sourceType == 1) ||
-		(productType == string(geektime.ProductTypeNormalVideo) && sourceType == 1) {
+		(productType == string(geektime.ProductTypeNormalVideo) && sourceType == 1) ||
+		(productType == string(geektime.ProductTypeOpenCoureVideo) && sourceType == 1) ||
+		(productType == string(geektime.ProductTypeOpenCoureText) && sourceType == 1) {
 		return true
 	}
 	fmt.Fprint(os.Stderr, "\r输入的课程 ID 有误\n")
@@ -617,15 +624,6 @@ func getVideoURLFromArticleContent(content string) (hasVideo bool, videoURL stri
 	}
 	f(doc)
 	return hasVideo, videoURL
-}
-
-func findProductTypeText(sourceType int) string {
-	for _, option := range productTypeOptions {
-		if option.Value == sourceType {
-			return option.Text
-		}
-	}
-	return ""
 }
 
 // Execute ...

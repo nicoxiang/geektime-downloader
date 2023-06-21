@@ -86,7 +86,7 @@ https://u.geekbang.org/lesson/419?article=535616
 
 **每日一课课程：**
 
-选择你想要下载的视频，查看 URL dailylesson/detail/后的数字，例如下面的链接中 100122405 就是课程 ID：
+选择你想要下载的视频，查看 URL ```dailylesson/detail/```后的数字，例如下面的链接中 100122405 就是课程 ID：
 
 ```
 https://time.geekbang.org/dailylesson/detail/100122405
@@ -94,10 +94,18 @@ https://time.geekbang.org/dailylesson/detail/100122405
 
 **大厂案例课程：**
 
-选择你想要下载的视频，查看 URL qconplus/detail/后的数字，例如下面的链接中 100110494 就是课程 ID：
+选择你想要下载的视频，查看 URL ```qconplus/detail/```后的数字，例如下面的链接中 100110494 就是课程 ID：
 
 ```
 https://time.geekbang.org/qconplus/detail/100110494
+```
+
+**公开课课程：**
+
+选择你想要下载的视频，查看 URL ```opencourse/intro/``` 或 ```opencourse/videointro```后的数字，例如下面的链接中 100546701 就是课程 ID：
+
+```
+https://time.geekbang.org/opencourse/videointro/100546701
 ```
 
 ### 为什么我下载的PDF是空白页?
