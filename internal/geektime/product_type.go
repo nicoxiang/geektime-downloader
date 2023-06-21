@@ -18,4 +18,6 @@ const (
 	ProductTypeOpenCoureVideo ProductType = "p35"
 	// ProductTypeOpenCourse 公开课(文字)
 	ProductTypeOpenCoureText ProductType = "p29"
+	// ProductTypeMeetting 会议
+	ProductTypeMeetting = "c6"
 )

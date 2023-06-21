@@ -43,7 +43,7 @@ var (
 	productTypeOption  productTypeSelectOption
 	columnOutputType   int
 	waitSeconds        int
-	productTypeOptions = make([]productTypeSelectOption, 5)
+	productTypeOptions = make([]productTypeSelectOption, 6)
 	geektimeClient     *geektime.Client
 	accountClient      *geektime.Client
 	universityClient   *geektime.Client
@@ -63,6 +63,7 @@ func init() {
 	productTypeOptions[2] = productTypeSelectOption{"大厂案例", 4}
 	productTypeOptions[3] = productTypeSelectOption{"训练营", 5} //custom source type, not use
 	productTypeOptions[4] = productTypeSelectOption{"公开课", 1}
+	productTypeOptions[5] = productTypeSelectOption{"会议", 1}
 
 	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)")
 	rootCmd.Flags().StringVar(&gcid, "gcid", "", "极客时间 cookie 值 gcid")
@@ -519,7 +520,8 @@ func isText() bool {
 func isVideo() bool {
 	return currentProduct.Type == string(geektime.ProductTypeNormalVideo) ||
 		currentProduct.Type == string(geektime.ProductTypeUniversityVideo) ||
-		currentProduct.Type == string(geektime.ProductTypeOpenCoureVideo)
+		currentProduct.Type == string(geektime.ProductTypeOpenCoureVideo) ||
+		currentProduct.Type == string(geektime.ProductTypeMeetting)
 }
 
 // Sets the bit at pos in the integer n.
@@ -582,7 +584,8 @@ func checkProductType(productType string, sourceType int) bool {
 		(productType == string(geektime.ProductTypeColumn) && sourceType == 1) ||
 		(productType == string(geektime.ProductTypeNormalVideo) && sourceType == 1) ||
 		(productType == string(geektime.ProductTypeOpenCoureVideo) && sourceType == 1) ||
-		(productType == string(geektime.ProductTypeOpenCoureText) && sourceType == 1) {
+		(productType == string(geektime.ProductTypeOpenCoureText) && sourceType == 1) ||
+		(productType == string(geektime.ProductTypeMeetting) && sourceType == 1) {
 		return true
 	}
 	fmt.Fprint(os.Stderr, "\r输入的课程 ID 有误\n")
