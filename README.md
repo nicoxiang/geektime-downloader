@@ -68,12 +68,20 @@ Flags:
 
 ### 如何查看课程 ID?
 
-**普通课程/会议：**
+**普通课程：**
 
 打开极客时间[课程列表页](https://time.geekbang.org/resource)，选择你想要查看的课程，在新打开的课程详情 Tab 页，查看 URL 最后的数字，例如下面的链接中 100056701 就是课程 ID：
 
 ```
 https://time.geekbang.org/column/intro/100056701
+```
+
+**会议：**
+
+打开极客时间[我的课程](https://time.geekbang.org/dashboard/course)，选择你想要查看的会议，在新打开的会议详情 Tab 页，查看 URL 最后的数字，例如下面的链接中 100547101 就是课程 ID：
+
+```
+https://time.geekbang.org/course/intro/100547101
 ```
 
 **训练营课程：**
