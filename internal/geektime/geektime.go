@@ -49,12 +49,11 @@ const (
 	// UniversityV1MyClassInfoPath get university class info and all articles info in it
 	UniversityV1MyClassInfoPath = "/serv/v1/myclass/info"
 
-
 	// GeekBangCookieDomain ...
 	GeekBangCookieDomain = ".geekbang.org"
 
 	// GCID ...
-	GCID  = "GCID"
+	GCID = "GCID"
 	// GCESS ...
 	GCESS = "GCESS"
 )
