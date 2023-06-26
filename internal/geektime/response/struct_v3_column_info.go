@@ -7,7 +7,7 @@ type V3ColumnInfoResponse struct {
 		ID               int    `json:"id"`
 		Type             string `json:"type"`
 		// IsCore           bool   `json:"is_core"`
-		// IsVideo          bool   `json:"is_video"`
+		IsVideo          bool   `json:"is_video"`
 		// IsAudio          bool   `json:"is_audio"`
 		// IsSaleProduct    bool   `json:"is_sale_product"`
 		// Ucode            string `json:"ucode"`

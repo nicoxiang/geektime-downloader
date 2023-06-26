@@ -30,26 +30,33 @@ import (
 )
 
 var (
-	phone              string
-	gcid               string
-	gcess              string
-	concurrency        int
-	downloadFolder     string
-	sp                 *spinner.Spinner
-	currentProduct     geektime.Product
-	quality            string
-	downloadComments   bool
-	sourceType         int //video source type
-	productTypeOption  productTypeSelectOption
-	columnOutputType   int
-	waitSeconds        int
-	productTypeOptions = make([]productTypeSelectOption, 6)
-	geektimeClient     *geektime.Client
-	accountClient      *geektime.Client
-	universityClient   *geektime.Client
+	phone               string
+	gcid                string
+	gcess               string
+	concurrency         int
+	downloadFolder      string
+	sp                  *spinner.Spinner
+	selectedProduct     geektime.Product
+	quality             string
+	downloadComments    bool
+	selectedProductType productTypeSelectOption
+	columnOutputType    int
+	waitSeconds         int
+	productTypeOptions  = make([]productTypeSelectOption, 6)
+	geektimeClient      *geektime.Client
+	accountClient       *geektime.Client
+	universityClient    *geektime.Client
 )
 
 type productTypeSelectOption struct {
+	Index              int
+	Text               string
+	SourceType         int
+	AcceptProductTypes []string
+	needSelectArticle  bool
+}
+
+type articleOpsOption struct {
 	Text  string
 	Value int
 }
@@ -58,13 +65,7 @@ func init() {
 	userHomeDir, _ := os.UserHomeDir()
 	concurrency = int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
 	defaultDownloadFolder := filepath.Join(userHomeDir, config.GeektimeDownloaderFolder)
-	productTypeOptions[0] = productTypeSelectOption{"普通课程", 1}
-	productTypeOptions[1] = productTypeSelectOption{"每日一课", 2}
-	productTypeOptions[2] = productTypeSelectOption{"大厂案例", 4}
-	productTypeOptions[3] = productTypeSelectOption{"训练营", 5} //custom source type, not use
-	productTypeOptions[4] = productTypeSelectOption{"公开课", 1}
-	productTypeOptions[5] = productTypeSelectOption{"会议", 1}
-
+	setProductTypeOptions()
 	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)")
 	rootCmd.Flags().StringVar(&gcid, "gcid", "", "极客时间 cookie 值 gcid")
 	rootCmd.Flags().StringVar(&gcess, "gcess", "", "极客时间 cookie 值 gcess")
@@ -80,6 +81,15 @@ func init() {
 
 	sp = spinner.New(spinner.CharSets[4], 100*time.Millisecond)
 	accountClient = geektime.NewAccountClient()
+}
+
+func setProductTypeOptions() {
+	productTypeOptions[0] = productTypeSelectOption{0, "普通课程", 1, []string{"c1", "c3"}, true}
+	productTypeOptions[1] = productTypeSelectOption{1, "每日一课", 2, []string{"d"}, false}
+	productTypeOptions[2] = productTypeSelectOption{2, "公开课", 1, []string{"p35", "p29", "p30"}, true}
+	productTypeOptions[3] = productTypeSelectOption{3, "大厂案例", 4, []string{"q"}, false}
+	productTypeOptions[4] = productTypeSelectOption{4, "训练营", 5, []string{""}, true} //custom source type, not use
+	productTypeOptions[5] = productTypeSelectOption{5, "其他", 1, []string{"x", "c6"}, true}
 }
 
 var rootCmd = &cobra.Command{
@@ -155,14 +165,13 @@ func selectProductType(ctx context.Context) {
 	}
 	index, _, err := prompt.Run()
 	checkError(err)
-	productTypeOption = productTypeOptions[index]
-	sourceType = productTypeOption.Value
+	selectedProductType = productTypeOptions[index]
 	letInputProductID(ctx)
 }
 
 func letInputProductID(ctx context.Context) {
 	prompt := promptui.Prompt{
-		Label: fmt.Sprintf("请输入%s的课程 ID", productTypeOption.Text),
+		Label: fmt.Sprintf("请输入%s的课程 ID", selectedProductType.Text),
 		Validate: func(s string) error {
 			if strings.TrimSpace(s) == "" {
 				return errors.New("课程 ID 不能为空")
@@ -180,13 +189,12 @@ func letInputProductID(ctx context.Context) {
 	// ignore, because checked before
 	id, _ := strconv.Atoi(s)
 
-	if sourceType == 1 || sourceType == 5 {
-		// when source type is normal cource or university cource
+	if selectedProductType.needSelectArticle {
 		// choose download all or download specified article
 		loadProduct(ctx, id)
 		productOps(ctx)
 	} else {
-		// when source type is daily lesson or qconplus,
+		// when product type is daily lesson or qconplus,
 		// input id means product id
 		// download video directly
 		productInfo, err := geektimeClient.ProductInfo(id)
@@ -197,14 +205,14 @@ func letInputProductID(ctx context.Context) {
 			letInputProductID(ctx)
 		}
 
-		if checkProductType(productInfo.Data.Info.Type, sourceType) {
+		if checkProductType(productInfo.Data.Info.Type) {
 			projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, productInfo.Data.Info.Title)
 			checkError(err)
 
 			err = video.DownloadArticleVideo(ctx,
 				geektimeClient,
 				productInfo.Data.Info.Article.ID,
-				sourceType,
+				selectedProductType.SourceType,
 				projectDir,
 				quality,
 				concurrency)
@@ -220,14 +228,14 @@ func loadProduct(ctx context.Context, productID int) {
 	sp.Start()
 	var p geektime.Product
 	var err error
-	if sourceType == 5 {
+	if isUniversity() {
 		p, err = universityClient.MyClassProduct(productID)
 		// university don't need check product type
 		// if input invalid id, access mark is 0
-	} else if sourceType == 1 {
+	} else {
 		p, err = geektimeClient.ColumnInfo(productID)
 		if err == nil {
-			c := checkProductType(p.Type, sourceType)
+			c := checkProductType(p.Type)
 			// if check product type fail, re-input product
 			if !c {
 				sp.Stop()
@@ -245,18 +253,18 @@ func loadProduct(ctx context.Context, productID int) {
 		fmt.Fprint(os.Stderr, "尚未购买该课程\n")
 		letInputProductID(ctx)
 	}
-	currentProduct = p
+	selectedProduct = p
 }
 
 func productOps(ctx context.Context) {
-	options := make([]productTypeSelectOption, 3)
-	options[0] = productTypeSelectOption{"重新选择课程", 0}
+	options := make([]articleOpsOption, 3)
+	options[0] = articleOpsOption{"重新选择课程", 0}
 	if isText() {
-		options[1] = productTypeSelectOption{"下载当前专栏所有文章", 1}
-		options[2] = productTypeSelectOption{"选择文章", 2}
-	} else if isVideo() {
-		options[1] = productTypeSelectOption{"下载所有视频", 1}
-		options[2] = productTypeSelectOption{"选择视频", 2}
+		options[1] = articleOpsOption{"下载当前专栏所有文章", 1}
+		options[2] = articleOpsOption{"选择文章", 2}
+	} else {
+		options[1] = articleOpsOption{"下载所有视频", 1}
+		options[2] = articleOpsOption{"选择视频", 2}
 	}
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
@@ -264,7 +272,7 @@ func productOps(ctx context.Context) {
 		Inactive: "{{if eq .Value 0}} {{ .Text | green }} {{else}} {{ .Text }} {{end}}",
 	}
 	prompt := promptui.Select{
-		Label:        fmt.Sprintf("当前选中的专栏为: %s, 请继续选择：", currentProduct.Title),
+		Label:        fmt.Sprintf("当前选中的专栏为: %s, 请继续选择：", selectedProduct.Title),
 		Items:        options,
 		Templates:    templates,
 		Size:         len(options),
@@ -292,7 +300,7 @@ func selectArticle(ctx context.Context) {
 			Title: "返回上一级",
 		},
 	}
-	items = append(items, currentProduct.Articles...)
+	items = append(items, selectedProduct.Articles...)
 	templates := &promptui.SelectTemplates{
 		Label:    "{{ . }}",
 		Active:   "{{ `>` | red }} {{ .Title | red }}",
@@ -316,9 +324,9 @@ func handleSelectArticle(ctx context.Context, index int) {
 	if index == 0 {
 		productOps(ctx)
 	}
-	a := currentProduct.Articles[index-1]
+	a := selectedProduct.Articles[index-1]
 
-	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, currentProduct.Title)
+	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, selectedProduct.Title)
 	checkError(err)
 	downloadArticle(ctx, a, projectDir)
 	fmt.Printf("\r%s 下载完成", a.Title)
@@ -328,21 +336,21 @@ func handleSelectArticle(ctx context.Context, index int) {
 
 func handleDownloadAll(ctx context.Context) {
 	loadArticles()
-	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, currentProduct.Title)
+	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, selectedProduct.Title)
 	checkError(err)
 	downloaded, err := findDownloadedArticleFileNames(projectDir)
 	checkError(err)
 	if isText() {
 		rand.Seed(time.Now().UnixNano())
-		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", currentProduct.Title)
-		total := len(currentProduct.Articles)
+		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", selectedProduct.Title)
+		total := len(selectedProduct.Articles)
 		var i int
 
 		needDownloadPDF := columnOutputType&1 == 1
 		needDownloadMD := (columnOutputType>>1)&1 == 1
 		needDownloadAudio := (columnOutputType>>2)&1 == 1
 
-		for _, a := range currentProduct.Articles {
+		for _, a := range selectedProduct.Articles {
 			fileName := filenamify.Filenamify(a.Title)
 			var b int
 			if _, exists := downloaded[fileName+pdf.PDFExtension]; exists {
@@ -409,17 +417,17 @@ func handleDownloadAll(ctx context.Context) {
 			r := rand.Intn(2000)
 			time.Sleep(time.Duration(r) * time.Millisecond)
 		}
-	} else if isVideo() {
-		for _, a := range currentProduct.Articles {
+	} else {
+		for _, a := range selectedProduct.Articles {
 			fileName := filenamify.Filenamify(a.Title) + video.TSExtension
 			if _, ok := downloaded[fileName]; ok {
 				continue
 			}
-			if sourceType == 1 {
-				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, sourceType, projectDir, quality, concurrency)
+			if isUniversity() {
+				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, selectedProduct, projectDir, quality, concurrency)
 				checkError(err)
-			} else if sourceType == 5 {
-				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, currentProduct, projectDir, quality, concurrency)
+			} else {
+				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
 				checkError(err)
 			}
 		}
@@ -433,12 +441,12 @@ func increasePDFCount(total int, i *int) {
 }
 
 func loadArticles() {
-	if len(currentProduct.Articles) <= 0 {
+	if len(selectedProduct.Articles) <= 0 {
 		sp.Prefix = "[ 正在加载文章列表... ]"
 		sp.Start()
-		articles, err := geektimeClient.ColumnArticles(strconv.Itoa(currentProduct.ID))
+		articles, err := geektimeClient.ColumnArticles(strconv.Itoa(selectedProduct.ID))
 		checkError(err)
-		currentProduct.Articles = articles
+		selectedProduct.Articles = articles
 		sp.Stop()
 	}
 }
@@ -501,27 +509,23 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 
 		sp.Stop()
 		checkError(err)
-	} else if isVideo() {
-		if sourceType == 1 {
-			err := video.DownloadArticleVideo(ctx, geektimeClient, article.AID, sourceType, projectDir, quality, concurrency)
+	} else {
+		if isUniversity() {
+			err := video.DownloadUniversityVideo(ctx, universityClient, article.AID, selectedProduct, projectDir, quality, concurrency)
 			checkError(err)
-		} else if sourceType == 5 {
-			err := video.DownloadUniversityVideo(ctx, universityClient, article.AID, currentProduct, projectDir, quality, concurrency)
+		} else {
+			err := video.DownloadArticleVideo(ctx, geektimeClient, article.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
 			checkError(err)
 		}
 	}
 }
 
 func isText() bool {
-	return currentProduct.Type == string(geektime.ProductTypeColumn) ||
-		currentProduct.Type == string(geektime.ProductTypeOpenCoureText)
+	return !selectedProduct.IsVideo
 }
 
-func isVideo() bool {
-	return currentProduct.Type == string(geektime.ProductTypeNormalVideo) ||
-		currentProduct.Type == string(geektime.ProductTypeUniversityVideo) ||
-		currentProduct.Type == string(geektime.ProductTypeOpenCoureVideo) ||
-		currentProduct.Type == string(geektime.ProductTypeMeetting)
+func isUniversity() bool {
+	return selectedProductType.Index == 4
 }
 
 // Sets the bit at pos in the integer n.
@@ -578,15 +582,11 @@ func mkDownloadProjectDir(downloadFolder, phone, gcid, projectName string) (stri
 	return path, nil
 }
 
-func checkProductType(productType string, sourceType int) bool {
-	if (productType == string(geektime.ProductTypeDailyLesson) && sourceType == 2) ||
-		(productType == string(geektime.ProductTypeQCONPlus) && sourceType == 4) ||
-		(productType == string(geektime.ProductTypeColumn) && sourceType == 1) ||
-		(productType == string(geektime.ProductTypeNormalVideo) && sourceType == 1) ||
-		(productType == string(geektime.ProductTypeOpenCoureVideo) && sourceType == 1) ||
-		(productType == string(geektime.ProductTypeOpenCoureText) && sourceType == 1) ||
-		(productType == string(geektime.ProductTypeMeetting) && sourceType == 1) {
-		return true
+func checkProductType(productType string) bool {
+	for _, pt := range selectedProductType.AcceptProductTypes {
+		if pt == productType {
+			return true
+		}
 	}
 	fmt.Fprint(os.Stderr, "\r输入的课程 ID 有误\n")
 	return false

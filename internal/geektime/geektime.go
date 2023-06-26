@@ -75,6 +75,7 @@ type Product struct {
 	ID       int
 	Title    string
 	Type     string
+	IsVideo  bool
 	Articles []Article
 }
 
@@ -237,10 +238,11 @@ func (c *Client) ColumnInfo(productID int) (Product, error) {
 	}
 
 	return Product{
-		Access: res.Data.Extra.Sub.AccessMask > 0,
-		ID:     res.Data.ID,
-		Type:   res.Data.Type,
-		Title:  res.Data.Title,
+		Access:  res.Data.Extra.Sub.AccessMask > 0,
+		ID:      res.Data.ID,
+		Type:    res.Data.Type,
+		Title:   res.Data.Title,
+		IsVideo: res.Data.IsVideo,
 	}, nil
 }
 
@@ -395,7 +397,7 @@ func (c *Client) MyClassProduct(classID int) (Product, error) {
 		Access: true,
 		ID:     classID,
 		Title:  res.Data.Title,
-		Type:   string(ProductTypeUniversityVideo),
+		Type:   "",
 	}
 	var articles []Article
 	for _, lesson := range res.Data.Lessons {
