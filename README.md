@@ -76,17 +76,9 @@ Flags:
 https://time.geekbang.org/column/intro/100056701
 ```
 
-**会议：**
-
-打开极客时间[我的课程](https://time.geekbang.org/dashboard/course)，选择你想要查看的会议，在新打开的会议详情 Tab 页，查看 URL 最后的数字，例如下面的链接中 100547101 就是课程 ID：
-
-```
-https://time.geekbang.org/course/intro/100547101
-```
-
 **训练营课程：**
 
-打开极客时间[训练营课程列表页](https://u.geekbang.org/schedule)，选择你想要查看的课程，在新打开的课程详情 Tab 页，查看 URL lesson/后的数字，例如下面的链接中 419 就是课程 ID：
+打开极客时间[训练营课程列表页](https://u.geekbang.org/schedule)，选择你想要查看的课程，在新打开的课程详情 Tab 页，查看 URL ```lesson/```后的数字，例如下面的链接中 419 就是课程 ID：
 
 ```
 https://u.geekbang.org/lesson/419?article=535616
@@ -110,10 +102,18 @@ https://time.geekbang.org/qconplus/detail/100110494
 
 **公开课课程：**
 
-选择你想要下载的视频，查看 URL ```opencourse/intro/``` 或 ```opencourse/videointro```后的数字，例如下面的链接中 100546701 就是课程 ID：
+选择你想要下载的视频，查看 URL ```opencourse/intro/``` 或 ```opencourse/videointro/```后的数字，例如下面的链接中 100546701 就是课程 ID：
 
 ```
 https://time.geekbang.org/opencourse/videointro/100546701
+```
+
+**其他：**
+
+打开极客时间[我的课程-其他](https://time.geekbang.org/dashboard/course)，选择你想要查看的会议，在新打开的会议详情 Tab 页，查看 URL ```course/intro/``` 最后的数字，例如下面的链接中 100551201 就是课程 ID：
+
+```
+https://time.geekbang.org/course/intro/100551201
 ```
 
 ### 为什么我下载的PDF是空白页?
