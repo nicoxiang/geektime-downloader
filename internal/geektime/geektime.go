@@ -398,6 +398,7 @@ func (c *Client) MyClassProduct(classID int) (Product, error) {
 		ID:     classID,
 		Title:  res.Data.Title,
 		Type:   "",
+		IsVideo: true,
 	}
 	var articles []Article
 	for _, lesson := range res.Data.Lessons {
