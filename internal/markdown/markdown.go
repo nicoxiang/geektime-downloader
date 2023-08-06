@@ -86,7 +86,7 @@ func findAllImages(md string) (images []string) {
 	for _, matches := range imgRegexp.FindAllStringSubmatch(md, -1) {
 		if len(matches) == 3 {
 			s := matches[2]
-			_, err := url.Parse(s)
+			_, err := url.ParseRequestURI(s)
 			if err == nil {
 				images = append(images, s)
 			}
