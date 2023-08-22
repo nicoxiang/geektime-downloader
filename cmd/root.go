@@ -441,7 +441,7 @@ func increasePDFCount(total int, i *int) {
 }
 
 func loadArticles() {
-	if len(selectedProduct.Articles) <= 0 {
+	if !isUniversity() && len(selectedProduct.Articles) <= 0 {
 		sp.Prefix = "[ 正在加载文章列表... ]"
 		sp.Start()
 		articles, err := geektimeClient.ColumnArticles(strconv.Itoa(selectedProduct.ID))
