@@ -451,6 +451,9 @@ func do(r *resty.Request) (*resty.Response, error) {
 
 	if code == 0 {
 		return resp, nil
+	}else if code == -3050 || code == -2000 {
+		// //未登录或者已失效
+		return nil, ErrAuthFailed
 	}
 
 	return nil, ErrGeekTimeAPIBadCode{r.URL, resp.String()}
