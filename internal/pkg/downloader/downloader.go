@@ -135,7 +135,7 @@ func retry(attempts int, sleep time.Duration, f func() error) (err error) {
 			time.Sleep(sleep)
 			sleep *= 2
 
-			logger.Info("retry hanppen, times: " + strconv.Itoa(i))
+			logger.Infof("retry hanppen, times: %s", strconv.Itoa(i))
 		}
 		err = f()
 		if err == nil || errors.Is(err, context.Canceled) {

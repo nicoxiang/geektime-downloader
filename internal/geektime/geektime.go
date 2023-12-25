@@ -433,6 +433,10 @@ func (c *Client) newRequest(method, url string, params map[string]string, body i
 }
 
 func do(r *resty.Request) (*resty.Response, error) {
+	logger.Infof("Http request start, method: %s, url: %s",
+		r.Method,
+		r.URL,
+	)
 	resp, err := r.Execute(r.Method, r.URL)
 
 	if err != nil {
@@ -451,10 +455,15 @@ func do(r *resty.Request) (*resty.Response, error) {
 
 	if code == 0 {
 		return resp, nil
-	}else if code == -3050 || code == -2000 {
+	} else if code == -3050 || code == -2000 {
 		// //未登录或者已失效
 		return nil, ErrAuthFailed
 	}
+
+	logger.Infof("Http request end, status code: %s, response body: %s",
+		resp.RawResponse.StatusCode,
+		resp.String(),
+	)
 
 	return nil, ErrGeekTimeAPIBadCode{r.URL, resp.String()}
 }
