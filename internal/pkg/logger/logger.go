@@ -24,7 +24,7 @@ type customFormatter struct {
 // Format custom logrus log format
 func (f *customFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	// Get the file and line number where the log was called
-	_, filename, line, _ := runtime.Caller(2)
+	_, filename, line, _ := runtime.Caller(7)
 
 	// Get the script name from the full file path
 	fullPathName := filepath.Base(filename)

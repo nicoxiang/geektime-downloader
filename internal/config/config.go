@@ -79,16 +79,8 @@ func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) error {
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		return err
 	}
-	files, err := ioutil.ReadDir(dir)
-	if err != nil {
-		return err
-	}
-	for _, fi := range files {
-		// config file already exists
-		if strings.HasPrefix(fi.Name(), phone) {
-			return nil
-		}
-	}
+	removeConfig(dir, phone)
+
 	file, err := ioutil.TempFile(dir, phone)
 	if err != nil {
 		return err
@@ -107,6 +99,10 @@ func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) error {
 // RemoveConfig remove specified users' config
 func RemoveConfig(phone string) error {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
+	return removeConfig(dir, phone)
+}
+
+func removeConfig(dir, phone string) error {
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
 		return err
@@ -125,7 +121,7 @@ func RemoveConfig(phone string) error {
 			}
 		}
 	}
-	return nil
+	return nil;
 }
 
 func writeOnelineConfig(sb strings.Builder, cookie *http.Cookie) strings.Builder {
