@@ -3,7 +3,7 @@ module github.com/nicoxiang/geektime-downloader
 go 1.18
 
 require (
-	github.com/JohannesKaufmann/html-to-markdown v1.4.2
+	github.com/JohannesKaufmann/html-to-markdown v1.5.0
 	github.com/briandowns/spinner v1.23.0
 	github.com/cheggaaa/pb/v3 v3.1.4
 	github.com/chromedp/cdproto v0.0.0-20230802225258-3cf4e6d46a89
