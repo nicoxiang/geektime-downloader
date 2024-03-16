@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	syncByte = uint8(71) //0x47
+	// syncByte = uint8(71) //0x47
 	// TSExtension ...
 	TSExtension = ".ts"
 )
