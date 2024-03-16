@@ -13,11 +13,11 @@ var (
 	linePattern = regexp.MustCompile(`([a-zA-Z-]+)=("[^"]+"|[^",]+)`)
 )
 
-// Parse do m3u8 url GET request, and extract ts file names and decrypt key from that
-func Parse(client *geektime.Client, m3u8url string) (tsFileNames []string, keyURI string, err error) {
+// Parse do m3u8 url GET request, and extract ts file names and check if it's encrypt video
+func Parse(client *geektime.Client, m3u8url string) (tsFileNames []string, isVodEncryptVideo bool, err error) {
 	m3u8Resp, err := client.HTTPClient.R().SetDoNotParseResponse(true).Get(m3u8url)
 	if err != nil {
-		return nil, "", err
+		return nil, false, err
 	}
 	defer m3u8Resp.RawBody().Close()
 	s := bufio.NewScanner(m3u8Resp.RawBody())
@@ -33,7 +33,7 @@ func Parse(client *geektime.Client, m3u8url string) (tsFileNames []string, keyUR
 		if strings.HasPrefix(line, "#EXT-X-KEY") && !gotKeyURI {
 			// ONLY Method and URI, IV not present
 			params := parseLineParameters(line)
-			keyURI, gotKeyURI = params["URI"], true
+			isVodEncryptVideo, gotKeyURI = params["MEATHOD"] == "AES-128", true
 		}
 		if !strings.HasPrefix(line, "#") && strings.HasSuffix(line, ".ts") {
 			tsFileNames = append(tsFileNames, line)
