@@ -167,10 +167,19 @@ func (c *Client) Login(phone, password string) ([]*http.Cookie, error) {
 		},
 		&res,
 	)
+
+	logger.Infof("Login request start")
 	resp, err := r.Execute(r.Method, r.URL)
 
 	if err != nil {
 		return nil, err
+	}
+
+	if resp.RawResponse.StatusCode != 200 || res.Code != 0 {
+		logger.Warnf("Login request end, status code: %d, response body: %s",
+			resp.RawResponse.StatusCode,
+			resp.String(),
+		)
 	}
 
 	if res.Code == 0 {
@@ -206,13 +215,20 @@ func (c *Client) Auth(cs []*http.Cookie) error {
 		res,
 	)
 	r.SetHeader(Origin, DefaultBaseURL)
+
+	logger.Infof("Auth request start")
 	resp, err := r.Execute(r.Method, r.URL)
 
 	if err != nil {
 		return err
 	}
 
-	if resp.RawResponse.StatusCode == 452 || res.Code != 0 {
+	if resp.RawResponse.StatusCode != 200 || res.Code != 0 {
+		logger.Warnf("Auth request end, status code: %d, response body: %s",
+			resp.RawResponse.StatusCode,
+			resp.String(),
+		)
+
 		// result Code -1
 		// {\"error\":{\"msg\":\"未登录\",\"code\":-2000}
 		return ErrAuthFailed
@@ -394,10 +410,10 @@ func (c *Client) MyClassProduct(classID int) (Product, error) {
 	}
 
 	p = Product{
-		Access: true,
-		ID:     classID,
-		Title:  res.Data.Title,
-		Type:   "",
+		Access:  true,
+		ID:      classID,
+		Title:   res.Data.Title,
+		Type:    "",
 		IsVideo: true,
 	}
 	var articles []Article
@@ -433,16 +449,24 @@ func (c *Client) newRequest(method, url string, params map[string]string, body i
 }
 
 func do(r *resty.Request) (*resty.Response, error) {
+	logger.Infof("Http request start, method: %s, url: %s",
+		r.Method,
+		r.URL,
+	)
 	resp, err := r.Execute(r.Method, r.URL)
 
 	if err != nil {
 		return nil, err
 	}
 
-	if resp.RawResponse.StatusCode == 451 {
-		return nil, ErrGeekTimeRateLimit
-	} else if resp.RawResponse.StatusCode == 452 {
-		return nil, ErrAuthFailed
+	statusCode := resp.RawResponse.StatusCode
+	if statusCode != 200 {
+		logNotOkResponse(resp)
+		if statusCode == 451 {
+			return nil, ErrGeekTimeRateLimit
+		} else if statusCode == 452 {
+			return nil, ErrAuthFailed
+		}
 	}
 
 	rv := reflect.ValueOf(r.Result)
@@ -453,5 +477,20 @@ func do(r *resty.Request) (*resty.Response, error) {
 		return resp, nil
 	}
 
+	logNotOkResponse(resp)
+	//未登录或者已失效
+	if code == -3050 || code == -2000 {
+		return nil, ErrAuthFailed
+	}
+
 	return nil, ErrGeekTimeAPIBadCode{r.URL, resp.String()}
+}
+
+func logNotOkResponse(resp *resty.Response) {
+	logger.Warnf("Http request end, method: %s, url: %s, status code: %d, response body: %s",
+		resp.RawResponse.Request.Method,
+		resp.RawResponse.Request.URL,
+		resp.RawResponse.StatusCode,
+		resp.String(),
+	)
 }

@@ -93,6 +93,14 @@ func hideRedundantElements(downloadComments bool) chromedp.ActionFunc {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
 		s :=
 			`
+			var headMain = document.getElementsByClassName('main')[0];
+   			if(headMain){
+      				headMain.style.display="none";
+			}
+   			var bottomWrapper = document.getElementsByClassName('sub-bottom-wrapper')[0];
+   			if(bottomWrapper){
+      				bottomWrapper.style.display="none";
+			}
 			var openAppdiv = document.getElementsByClassName('openApp')[0];
 			if(openAppdiv){
 				openAppdiv.parentNode.parentNode.parentNode.style.display="none";

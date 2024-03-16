@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	syncByte = uint8(71) //0x47
+	// syncByte = uint8(71) //0x47
 	// TSExtension ...
 	TSExtension = ".ts"
 )
@@ -30,12 +30,12 @@ const (
 // EncryptType enum
 type EncryptType int
 
-const (
-	// AliyunVodEncrypt ...
-	AliyunVodEncrypt EncryptType = iota
-	// HLSStandardEncrypt ...
-	HLSStandardEncrypt
-)
+// const (
+// 	// AliyunVodEncrypt ...
+// 	AliyunVodEncrypt EncryptType = iota
+// 	// HLSStandardEncrypt ...
+// 	HLSStandardEncrypt
+// )
 
 // GetPlayInfoResponse is the response struct for api GetPlayInfo
 type GetPlayInfoResponse struct {
@@ -120,13 +120,17 @@ func downloadAliyunVodEncryptVideo(ctx context.Context,
 		return err
 	}
 	tsURLPrefix := extractTSURLPrefix(playInfo.PlayURL)
-	// just ignore keyURI in m3u8, aliyun private vod use another decrypt method
-	tsFileNames, _, err := m3u8.Parse(client, playInfo.PlayURL)
+
+	tsFileNames, isVodEncryptVideo, err := m3u8.Parse(client, playInfo.PlayURL)
 	if err != nil {
 		return err
 	}
-	decryptKey := crypto.GetAESDecryptKey(clientRand, playInfo.Rand, playInfo.Plaintext)
-	return download(ctx, tsURLPrefix, videoTitle, projectDir, tsFileNames, []byte(decryptKey), playInfo.Size, AliyunVodEncrypt, concurrency)
+
+	decryptKey := ""
+	if isVodEncryptVideo {
+		decryptKey = crypto.GetAESDecryptKey(clientRand, playInfo.Rand, playInfo.Plaintext)
+	}
+	return download(ctx, tsURLPrefix, videoTitle, projectDir, tsFileNames, []byte(decryptKey), playInfo.Size, isVodEncryptVideo, concurrency)
 }
 
 // DownloadMP4 ...
@@ -161,7 +165,7 @@ func download(ctx context.Context,
 	tsFileNames []string,
 	decryptKey []byte,
 	size int64,
-	videoEncryptType EncryptType,
+	isVodEncryptVideo bool,
 	concurrency int) (err error) {
 
 	// Make temp ts folder and download temp ts files
@@ -197,12 +201,12 @@ func download(ctx context.Context,
 	bar.Finish()
 
 	// Read temp ts files, decrypt and merge into the one final video file
-	err = mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir, decryptKey, videoEncryptType)
+	err = mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir, decryptKey, isVodEncryptVideo)
 
 	return
 }
 
-func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte, videoEncryptType EncryptType) error {
+func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte, isVodEncryptVideo bool) error {
 	tempTSFiles, err := ioutil.ReadDir(tempVideoDir)
 	if err != nil {
 		return err
@@ -220,21 +224,23 @@ func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte, 
 		if err != nil {
 			return err
 		}
-		switch videoEncryptType {
-		case HLSStandardEncrypt:
-			aes128 := crypto.AESDecryptCBC(f, key, make([]byte, 16))
-			// https://en.wikipedia.org/wiki/MPEG_transport_stream
-			for j := 0; j < len(aes128); j++ {
-				if aes128[j] == syncByte {
-					aes128 = aes128[j:]
-					break
-				}
-			}
-			f = aes128
-		case AliyunVodEncrypt:
+
+		if isVodEncryptVideo {
 			tsParser := m3u8.NewTSParser(f, string(key))
 			f = tsParser.Decrypt()
 		}
+
+		// case HLSStandardEncrypt:
+		// 	aes128 := crypto.AESDecryptCBC(f, key, make([]byte, 16))
+		// 	// https://en.wikipedia.org/wiki/MPEG_transport_stream
+		// 	for j := 0; j < len(aes128); j++ {
+		// 	if aes128[j] == syncByte {
+		// 		aes128 = aes128[j:]
+		// 		break
+		// 	}
+		// }
+		// f = aes128
+
 		if _, err := finalVideoFile.Write(f); err != nil {
 			return err
 		}
