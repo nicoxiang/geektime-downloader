@@ -24,6 +24,7 @@ const (
 	UserAgent = "User-Agent"
 	// GeekBangUniversityBaseURL ...
 	GeekBangUniversityBaseURL = "https://u.geekbang.org"
+	GeekBangEnterpriseBaseURL = "https://b.geekbang.org"
 	// GeekBangAccountBaseURL ...
 	GeekBangAccountBaseURL = "https://account.geekbang.org"
 	// LoginPath ...
@@ -48,6 +49,11 @@ const (
 	UniversityV1VideoPlayAuthPath = "/serv/v1/video/play-auth"
 	// UniversityV1MyClassInfoPath get university class info and all articles info in it
 	UniversityV1MyClassInfoPath = "/serv/v1/myclass/info"
+
+	V1EnterpriseProductInfoPath       = "/app/v1/course/info"
+	V1EnterpriseArticlesInfoPath      = "/app/v1/course/articles"
+	V1EnterpriseArticleDetailInfoPath = "/app/v1/article/detail"
+	V1EnterpriseVideoPlayAuthPath     = "/app/v1/source_auth/video_play_auth"
 
 	// GeekBangCookieDomain ...
 	GeekBangCookieDomain = ".geekbang.org"
@@ -138,6 +144,19 @@ func NewUniversityClient(cs []*http.Cookie) *Client {
 		SetLogger(logger.DiscardLogger{})
 
 	c := &Client{HTTPClient: httpClient, BaseURL: GeekBangUniversityBaseURL, Cookies: cs}
+	return c
+}
+
+// NewEnterpriseClient
+func NewEnterpriseClient(cs []*http.Cookie) *Client {
+	httpClient := resty.New().
+		SetCookies(cs).
+		SetRetryCount(1).
+		SetTimeout(10*time.Second).
+		SetHeader("User-Agent", DefaultUserAgent).
+		SetLogger(logger.DiscardLogger{})
+
+	c := &Client{HTTPClient: httpClient, BaseURL: GeekBangEnterpriseBaseURL, Cookies: cs}
 	return c
 }
 
@@ -326,6 +345,108 @@ func (c *Client) ProductInfo(productID int) (response.V3ProductInfoResponse, err
 		return response.V3ProductInfoResponse{}, err
 	}
 	return res, nil
+}
+
+func (c *Client) enterpriseProductInfo(productID int) (response.V1EnterpriseProductInfoResponse, error) {
+	var res response.V1EnterpriseProductInfoResponse
+	r := c.newRequest(resty.MethodPost,
+		V1EnterpriseProductInfoPath,
+		nil,
+		map[string]interface{}{
+			"id": productID,
+		},
+		&res,
+	)
+	if _, err := do(r); err != nil {
+		return response.V1EnterpriseProductInfoResponse{}, err
+	}
+	return res, nil
+}
+
+func (c *Client) ArticlesInfo(id int) (Product, error) {
+	var p Product
+	productInfo, err := c.enterpriseProductInfo(id)
+	if err != nil {
+		return p, err
+	}
+
+	var res response.V1EnterpriseArticlesResponse
+	r := c.newRequest(resty.MethodPost,
+		V1EnterpriseArticlesInfoPath,
+		nil,
+		map[string]interface{}{
+			"id": id,
+		},
+		&res,
+	)
+
+	resp, err := do(r)
+	if err != nil {
+		return p, err
+	}
+
+	if res.Code != 0 {
+		if res.Data.IsShow == false && productInfo.Data.Extra.IsMyCourse == false {
+			p.Access = false
+			return p, nil
+		}
+		return p, ErrGeekTimeAPIBadCode{V1EnterpriseArticlesInfoPath, resp.String()}
+	}
+
+	p = Product{
+		Access:  true,
+		ID:      id,
+		Title:   productInfo.Data.Title,
+		Type:    "",
+		IsVideo: true,
+	}
+	var articles []Article
+
+	for _, sections := range res.Data.List {
+		for _, a := range sections.ArticleList {
+			articleId, _ := strconv.Atoi(a.Article.ID)
+			articles = append(articles, Article{
+				AID:   articleId,
+				Title: a.Article.Title,
+			})
+		}
+	}
+	p.Articles = articles
+
+	return p, nil
+}
+
+func (c *Client) V1EnterpriseArticleDetailInfo(articleID string) (response.V1EnterpriseArticlesDetailResponse, error) {
+	var res response.V1EnterpriseArticlesDetailResponse
+	r := c.newRequest(resty.MethodPost,
+		V1EnterpriseArticleDetailInfoPath,
+		nil,
+		map[string]interface{}{
+			"article_id": articleID,
+		},
+		&res,
+	)
+	if _, err := do(r); err != nil {
+		return response.V1EnterpriseArticlesDetailResponse{}, err
+	}
+	return res, nil
+}
+
+func (c *Client) EnterPriseVideoPlayAuth(articleID, videoID string) (string, error) {
+	var res response.V3VideoPlayAuthResponse
+	r := c.newRequest(resty.MethodPost,
+		V1EnterpriseVideoPlayAuthPath,
+		nil,
+		map[string]interface{}{
+			"aid":      articleID,
+			"video_id": videoID,
+		},
+		&res,
+	)
+	if _, err := do(r); err != nil {
+		return "", err
+	}
+	return res.Data.PlayAuth, nil
 }
 
 // V3ArticleInfo used to get daily lesson or qconplus article info

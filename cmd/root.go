@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/nicoxiang/geektime-downloader/internal/geektime/response"
 	"io/ioutil"
 	"math"
 	"math/rand"
@@ -30,22 +31,24 @@ import (
 )
 
 var (
-	phone               string
-	gcid                string
-	gcess               string
-	concurrency         int
-	downloadFolder      string
-	sp                  *spinner.Spinner
-	selectedProduct     geektime.Product
-	quality             string
-	downloadComments    bool
-	selectedProductType productTypeSelectOption
-	columnOutputType    int
-	waitSeconds         int
-	productTypeOptions  = make([]productTypeSelectOption, 6)
-	geektimeClient      *geektime.Client
-	accountClient       *geektime.Client
-	universityClient    *geektime.Client
+	phone                string
+	gcid                 string
+	gcess                string
+	concurrency          int
+	downloadFolder       string
+	sp                   *spinner.Spinner
+	selectedProduct      geektime.Product
+	selectedEnterProduct response.V1EnterpriseArticlesResponse
+	quality              string
+	downloadComments     bool
+	selectedProductType  productTypeSelectOption
+	columnOutputType     int
+	waitSeconds          int
+	productTypeOptions   = make([]productTypeSelectOption, 7)
+	geektimeClient       *geektime.Client
+	geekEnterpriseClient *geektime.Client
+	accountClient        *geektime.Client
+	universityClient     *geektime.Client
 )
 
 type productTypeSelectOption struct {
@@ -90,6 +93,7 @@ func setProductTypeOptions() {
 	productTypeOptions[3] = productTypeSelectOption{3, "大厂案例", 4, []string{"q"}, false}
 	productTypeOptions[4] = productTypeSelectOption{4, "训练营", 5, []string{""}, true} //custom source type, not use
 	productTypeOptions[5] = productTypeSelectOption{5, "其他", 1, []string{"x", "c6"}, true}
+	productTypeOptions[6] = productTypeSelectOption{6, "企业版训练营", 6, []string{"c44"}, true}
 }
 
 var rootCmd = &cobra.Command{
@@ -145,6 +149,7 @@ var rootCmd = &cobra.Command{
 		}
 		geektimeClient = geektime.NewClient(readCookies)
 		universityClient = geektime.NewUniversityClient(readCookies)
+		geekEnterpriseClient = geektime.NewEnterpriseClient(readCookies)
 		selectProductType(cmd.Context())
 	},
 }
@@ -232,6 +237,8 @@ func loadProduct(ctx context.Context, productID int) {
 		p, err = universityClient.MyClassProduct(productID)
 		// university don't need check product type
 		// if input invalid id, access mark is 0
+	} else if isEnterpriseUniversity() {
+		p, err = geekEnterpriseClient.ArticlesInfo(productID)
 	} else {
 		p, err = geektimeClient.ColumnInfo(productID)
 		if err == nil {
@@ -426,6 +433,9 @@ func handleDownloadAll(ctx context.Context) {
 			if isUniversity() {
 				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, selectedProduct, projectDir, quality, concurrency)
 				checkError(err)
+			} else if isEnterpriseUniversity() {
+				err := video.DownloadEnterpriseArticleVideo(ctx, geekEnterpriseClient, a.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
+				checkError(err)
 			} else {
 				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
 				checkError(err)
@@ -441,7 +451,7 @@ func increasePDFCount(total int, i *int) {
 }
 
 func loadArticles() {
-	if !isUniversity() && len(selectedProduct.Articles) <= 0 {
+	if !isUniversity() && !isEnterpriseUniversity() && len(selectedProduct.Articles) <= 0 {
 		sp.Prefix = "[ 正在加载文章列表... ]"
 		sp.Start()
 		articles, err := geektimeClient.ColumnArticles(strconv.Itoa(selectedProduct.ID))
@@ -513,6 +523,9 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		if isUniversity() {
 			err := video.DownloadUniversityVideo(ctx, universityClient, article.AID, selectedProduct, projectDir, quality, concurrency)
 			checkError(err)
+		} else if isEnterpriseUniversity() {
+			err := video.DownloadEnterpriseArticleVideo(ctx, geekEnterpriseClient, article.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
+			checkError(err)
 		} else {
 			err := video.DownloadArticleVideo(ctx, geektimeClient, article.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
 			checkError(err)
@@ -526,6 +539,10 @@ func isText() bool {
 
 func isUniversity() bool {
 	return selectedProductType.Index == 4
+}
+
+func isEnterpriseUniversity() bool {
+	return selectedProductType.Index == 6
 }
 
 // Sets the bit at pos in the integer n.

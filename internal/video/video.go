@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -73,6 +74,36 @@ func DownloadArticleVideo(ctx context.Context,
 		projectDir,
 		quality,
 		articleInfo.Data.Info.Video.ID,
+		concurrency)
+}
+
+func DownloadEnterpriseArticleVideo(ctx context.Context,
+	client *geektime.Client,
+	articleID int,
+	sourceType int,
+	projectDir string,
+	quality string,
+	concurrency int,
+) error {
+
+	articleInfo, err := client.V1EnterpriseArticleDetailInfo(strconv.Itoa(articleID))
+	if err != nil {
+		return err
+	}
+	if articleInfo.Data.Video.ID == "" {
+		return nil
+	}
+	playAuth, err := client.EnterPriseVideoPlayAuth(strconv.Itoa(articleID), articleInfo.Data.Video.ID)
+	if err != nil {
+		return err
+	}
+	return downloadAliyunVodEncryptVideo(ctx,
+		client,
+		playAuth,
+		articleInfo.Data.Article.Title,
+		projectDir,
+		quality,
+		articleInfo.Data.Video.ID,
 		concurrency)
 }
 
@@ -185,11 +216,11 @@ func download(ctx context.Context,
 	for _, tsFileName := range tsFileNames {
 		u := tsURLPrefix + tsFileName
 		dst := filepath.Join(tempVideoDir, tsFileName)
-		
+
 		headers := make(map[string]string, 2)
 		headers[geektime.Origin] = geektime.DefaultBaseURL
 		headers[geektime.UserAgent] = geektime.DefaultUserAgent
-		
+
 		fileSize, err := downloader.DownloadFileConcurrently(ctx, dst, u, headers, 5)
 		if err != nil {
 			return err
