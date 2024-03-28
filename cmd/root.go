@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime/response"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
@@ -426,18 +425,24 @@ func handleDownloadAll(ctx context.Context) {
 		}
 	} else {
 		for _, a := range selectedProduct.Articles {
+			sectionDir := projectDir
 			fileName := filenamify.Filenamify(a.Title) + video.TSExtension
 			if _, ok := downloaded[fileName]; ok {
 				continue
 			}
+			// add sub dir
+			if a.SectionTitle != "" {
+				sectionDir, err = mkDownloadProjectSectionDir(projectDir, a.SectionTitle)
+				checkError(err)
+			}
 			if isUniversity() {
-				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, selectedProduct, projectDir, quality, concurrency)
+				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, selectedProduct, sectionDir, quality, concurrency)
 				checkError(err)
 			} else if isEnterpriseUniversity() {
-				err := video.DownloadEnterpriseArticleVideo(ctx, geekEnterpriseClient, a.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
+				err := video.DownloadEnterpriseArticleVideo(ctx, geekEnterpriseClient, a.AID, selectedProductType.SourceType, sectionDir, quality, concurrency)
 				checkError(err)
 			} else {
-				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
+				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, selectedProductType.SourceType, sectionDir, quality, concurrency)
 				checkError(err)
 			}
 		}
@@ -572,17 +577,24 @@ func readCookiesFromInput() []*http.Cookie {
 }
 
 func findDownloadedArticleFileNames(projectDir string) (map[string]struct{}, error) {
-	files, err := ioutil.ReadDir(projectDir)
-	res := make(map[string]struct{}, len(files))
-	if err != nil {
-		return res, err
-	}
-	if len(files) == 0 {
-		return res, nil
-	}
-	for _, f := range files {
-		res[f.Name()] = struct{}{}
-	}
+	res := make(map[string]struct{})
+	limit := 2
+	err := filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fmt.Printf("访问路径时出错：%v\n", err)
+			return err
+		}
+		// 计算当前路径的深度
+		depth := len(filepath.SplitList(path)) - len(filepath.SplitList(projectDir))
+		if depth >= limit {
+			return filepath.SkipDir // 如果达到限制深度，则跳过该文件夹及其子文件夹
+		}
+		if !info.IsDir() {
+			res[info.Name()] = struct{}{}
+		}
+		return nil
+	})
+	checkError(err)
 	return res, nil
 }
 
@@ -592,6 +604,15 @@ func mkDownloadProjectDir(downloadFolder, phone, gcid, projectName string) (stri
 		userName = gcid
 	}
 	path := filepath.Join(downloadFolder, userName, filenamify.Filenamify(projectName))
+	err := os.MkdirAll(path, os.ModePerm)
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func mkDownloadProjectSectionDir(downloadFolder, sectionName string) (string, error) {
+	path := filepath.Join(downloadFolder, filenamify.Filenamify(sectionName))
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
 		return "", err

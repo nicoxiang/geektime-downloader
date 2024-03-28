@@ -87,8 +87,9 @@ type Product struct {
 
 // Article ...
 type Article struct {
-	AID   int
-	Title string
+	AID          int
+	SectionTitle string
+	Title        string
 }
 
 // ErrGeekTimeAPIBadCode ...
@@ -406,8 +407,9 @@ func (c *Client) ArticlesInfo(id int) (Product, error) {
 		for _, a := range sections.ArticleList {
 			articleId, _ := strconv.Atoi(a.Article.ID)
 			articles = append(articles, Article{
-				AID:   articleId,
-				Title: a.Article.Title,
+				AID:          articleId,
+				SectionTitle: sections.Title,
+				Title:        a.Article.Title,
 			})
 		}
 	}
