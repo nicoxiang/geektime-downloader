@@ -35,7 +35,7 @@ type V1EnterpriseProductInfoResponse struct {
 			CoverID           int    `json:"cover_id"`
 			CoverStatus       int    `json:"cover_status"`
 		} `json:"cover"`
-		TeachTypeList     []string `json:"teach_type_list"`
+		TeachTypeList     []int    `json:"teach_type_list"`
 		TeachTypeNameList []string `json:"teach_type_name_list"`
 		Article           struct {
 			Count            int    `json:"count"`
