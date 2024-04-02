@@ -237,7 +237,7 @@ func loadProduct(ctx context.Context, productID int) {
 		// university don't need check product type
 		// if input invalid id, access mark is 0
 	} else if isEnterpriseUniversity() {
-		p, err = geekEnterpriseClient.ArticlesInfo(productID)
+		p, err = geekEnterpriseClient.EnterpriseArticlesInfo(productID)
 	} else {
 		p, err = geektimeClient.ColumnInfo(productID)
 		if err == nil {

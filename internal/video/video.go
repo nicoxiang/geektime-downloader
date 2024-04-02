@@ -93,7 +93,7 @@ func DownloadEnterpriseArticleVideo(ctx context.Context,
 	if articleInfo.Data.Video.ID == "" {
 		return nil
 	}
-	playAuth, err := client.EnterPriseVideoPlayAuth(strconv.Itoa(articleID), articleInfo.Data.Video.ID)
+	playAuth, err := client.EnterpriseVideoPlayAuth(strconv.Itoa(articleID), articleInfo.Data.Video.ID)
 	if err != nil {
 		return err
 	}

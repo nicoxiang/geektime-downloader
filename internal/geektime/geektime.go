@@ -50,10 +50,14 @@ const (
 	// UniversityV1MyClassInfoPath get university class info and all articles info in it
 	UniversityV1MyClassInfoPath = "/serv/v1/myclass/info"
 
-	V1EnterpriseProductInfoPath       = "/app/v1/course/info"
-	V1EnterpriseArticlesInfoPath      = "/app/v1/course/articles"
+	// V1EnterpriseProductInfoPath used in enterprise course product info
+	V1EnterpriseProductInfoPath = "/app/v1/course/info"
+	// V1EnterpriseArticlesInfoPath used in enterprise course articles info
+	V1EnterpriseArticlesInfoPath = "/app/v1/course/articles"
+	// V1EnterpriseArticleDetailInfoPath used in enterprise course article detail info
 	V1EnterpriseArticleDetailInfoPath = "/app/v1/article/detail"
-	V1EnterpriseVideoPlayAuthPath     = "/app/v1/source_auth/video_play_auth"
+	// V1EnterpriseVideoPlayAuthPath used in enterprise course video play auth
+	V1EnterpriseVideoPlayAuthPath = "/app/v1/source_auth/video_play_auth"
 
 	// GeekBangCookieDomain ...
 	GeekBangCookieDomain = ".geekbang.org"
@@ -364,7 +368,7 @@ func (c *Client) enterpriseProductInfo(productID int) (response.V1EnterpriseProd
 	return res, nil
 }
 
-func (c *Client) ArticlesInfo(id int) (Product, error) {
+func (c *Client) EnterpriseArticlesInfo(id int) (Product, error) {
 	var p Product
 	productInfo, err := c.enterpriseProductInfo(id)
 	if err != nil {
@@ -434,7 +438,7 @@ func (c *Client) V1EnterpriseArticleDetailInfo(articleID string) (response.V1Ent
 	return res, nil
 }
 
-func (c *Client) EnterPriseVideoPlayAuth(articleID, videoID string) (string, error) {
+func (c *Client) EnterpriseVideoPlayAuth(articleID, videoID string) (string, error) {
 	var res response.V3VideoPlayAuthResponse
 	r := c.newRequest(resty.MethodPost,
 		V1EnterpriseVideoPlayAuthPath,
