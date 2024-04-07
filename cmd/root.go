@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/nicoxiang/geektime-downloader/internal/geektime/response"
 	"math"
 	"math/rand"
 	"net/http"
@@ -37,7 +36,6 @@ var (
 	downloadFolder       string
 	sp                   *spinner.Spinner
 	selectedProduct      geektime.Product
-	selectedEnterProduct response.V1EnterpriseArticlesResponse
 	quality              string
 	downloadComments     bool
 	selectedProductType  productTypeSelectOption

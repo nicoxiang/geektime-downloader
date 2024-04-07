@@ -391,7 +391,7 @@ func (c *Client) EnterpriseArticlesInfo(id int) (Product, error) {
 	}
 
 	if res.Code != 0 {
-		if res.Data.IsShow == false && productInfo.Data.Extra.IsMyCourse == false {
+		if !res.Data.IsShow && !productInfo.Data.Extra.IsMyCourse {
 			p.Access = false
 			return p, nil
 		}
@@ -409,9 +409,9 @@ func (c *Client) EnterpriseArticlesInfo(id int) (Product, error) {
 
 	for _, sections := range res.Data.List {
 		for _, a := range sections.ArticleList {
-			articleId, _ := strconv.Atoi(a.Article.ID)
+			articleID, _ := strconv.Atoi(a.Article.ID)
 			articles = append(articles, Article{
-				AID:          articleId,
+				AID:          articleID,
 				SectionTitle: sections.Title,
 				Title:        a.Article.Title,
 			})
