@@ -42,6 +42,7 @@ var (
 	selectedProductType productTypeSelectOption
 	columnOutputType    int
 	waitSeconds         int
+	interval            int
 	productTypeOptions  = make([]productTypeSelectOption, 6)
 	geektimeClient      *geektime.Client
 	accountClient       *geektime.Client
@@ -74,6 +75,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
 	rootCmd.Flags().IntVar(&columnOutputType, "output", 1, "专栏的输出内容(1pdf,2markdown,4audio)可自由组合")
 	rootCmd.Flags().IntVar(&waitSeconds, "wait-seconds", 8, "Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒")
+	rootCmd.Flags().IntVar(&interval, "interval", 0, "下载视频的间隔时间, 单位为秒, 默认0秒")
 
 	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcid")
 	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcess")
@@ -88,7 +90,7 @@ func setProductTypeOptions() {
 	productTypeOptions[1] = productTypeSelectOption{1, "每日一课", 2, []string{"d"}, false}
 	productTypeOptions[2] = productTypeSelectOption{2, "公开课", 1, []string{"p35", "p29", "p30"}, true}
 	productTypeOptions[3] = productTypeSelectOption{3, "大厂案例", 4, []string{"q"}, false}
-	productTypeOptions[4] = productTypeSelectOption{4, "训练营", 5, []string{""}, true} //custom source type, not use
+	productTypeOptions[4] = productTypeSelectOption{4, "训练营", 5, []string{""}, true} // custom source type, not use
 	productTypeOptions[5] = productTypeSelectOption{5, "其他", 1, []string{"x", "c6"}, true}
 }
 
@@ -414,8 +416,7 @@ func handleDownloadAll(ctx context.Context) {
 			checkError(err)
 
 			increasePDFCount(total, &i)
-			r := rand.Intn(2000)
-			time.Sleep(time.Duration(r) * time.Millisecond)
+			waitRandomTime()
 		}
 	} else {
 		for _, a := range selectedProduct.Articles {
@@ -430,6 +431,7 @@ func handleDownloadAll(ctx context.Context) {
 				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
 				checkError(err)
 			}
+			waitRandomTime()
 		}
 	}
 	selectProductType(ctx)
@@ -627,6 +629,12 @@ func getVideoURLFromArticleContent(content string) (hasVideo bool, videoURL stri
 	}
 	f(doc)
 	return hasVideo, videoURL
+}
+
+// waitRandomTime wait interval seconds of time plus a 2000ms max jitter
+func waitRandomTime() {
+	r := interval*1000 + rand.Intn(2000)
+	time.Sleep(time.Duration(r) * time.Millisecond)
 }
 
 // Execute ...
