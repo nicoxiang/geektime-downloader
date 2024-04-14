@@ -24,6 +24,7 @@ import (
 
 const (
 	// syncByte = uint8(71) //0x47
+
 	// TSExtension ...
 	TSExtension = ".ts"
 )
@@ -77,6 +78,7 @@ func DownloadArticleVideo(ctx context.Context,
 		concurrency)
 }
 
+// DownloadEnterpriseArticleVideo download enterprise video
 func DownloadEnterpriseArticleVideo(ctx context.Context,
 	client *geektime.Client,
 	articleID int,
@@ -221,7 +223,7 @@ func download(ctx context.Context,
 		headers[geektime.Origin] = geektime.DefaultBaseURL
 		headers[geektime.UserAgent] = geektime.DefaultUserAgent
 
-		fileSize, err := downloader.DownloadFileConcurrently(ctx, dst, u, headers, 5)
+		fileSize, err := downloader.DownloadFileConcurrently(ctx, dst, u, headers, concurrency)
 		if err != nil {
 			return err
 		}

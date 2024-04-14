@@ -231,13 +231,13 @@ func loadProduct(ctx context.Context, productID int) {
 	var p geektime.Product
 	var err error
 	if isUniversity() {
-		p, err = universityClient.MyClassProduct(productID)
+		p, err = universityClient.GetUniversityProductInfo(productID)
 		// university don't need check product type
 		// if input invalid id, access mark is 0
-	} else if isEnterpriseUniversity() {
-		p, err = geekEnterpriseClient.EnterpriseArticlesInfo(productID)
+	} else if isEnterprise() {
+		p, err = geekEnterpriseClient.GetEnterpriseProductInfo(productID)
 	} else {
-		p, err = geektimeClient.ColumnInfo(productID)
+		p, err = geektimeClient.GetNormalProductInfo(productID)
 		if err == nil {
 			c := checkProductType(p.Type)
 			// if check product type fail, re-input product
@@ -297,7 +297,6 @@ func productOps(ctx context.Context) {
 }
 
 func selectArticle(ctx context.Context) {
-	loadArticles()
 	items := []geektime.Article{
 		{
 			AID:   -1,
@@ -339,7 +338,6 @@ func handleSelectArticle(ctx context.Context, index int) {
 }
 
 func handleDownloadAll(ctx context.Context) {
-	loadArticles()
 	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, selectedProduct.Title)
 	checkError(err)
 	downloaded, err := findDownloadedArticleFileNames(projectDir)
@@ -436,7 +434,7 @@ func handleDownloadAll(ctx context.Context) {
 			if isUniversity() {
 				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, selectedProduct, sectionDir, quality, concurrency)
 				checkError(err)
-			} else if isEnterpriseUniversity() {
+			} else if isEnterprise() {
 				err := video.DownloadEnterpriseArticleVideo(ctx, geekEnterpriseClient, a.AID, selectedProductType.SourceType, sectionDir, quality, concurrency)
 				checkError(err)
 			} else {
@@ -451,17 +449,6 @@ func handleDownloadAll(ctx context.Context) {
 func increasePDFCount(total int, i *int) {
 	(*i)++
 	fmt.Printf("\r已完成下载%d/%d", *i, total)
-}
-
-func loadArticles() {
-	if !isUniversity() && !isEnterpriseUniversity() && len(selectedProduct.Articles) <= 0 {
-		sp.Prefix = "[ 正在加载文章列表... ]"
-		sp.Start()
-		articles, err := geektimeClient.ColumnArticles(strconv.Itoa(selectedProduct.ID))
-		checkError(err)
-		selectedProduct.Articles = articles
-		sp.Stop()
-	}
 }
 
 func downloadArticle(ctx context.Context, article geektime.Article, projectDir string) {
@@ -526,7 +513,7 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		if isUniversity() {
 			err := video.DownloadUniversityVideo(ctx, universityClient, article.AID, selectedProduct, projectDir, quality, concurrency)
 			checkError(err)
-		} else if isEnterpriseUniversity() {
+		} else if isEnterprise() {
 			err := video.DownloadEnterpriseArticleVideo(ctx, geekEnterpriseClient, article.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
 			checkError(err)
 		} else {
@@ -544,7 +531,7 @@ func isUniversity() bool {
 	return selectedProductType.Index == 4
 }
 
-func isEnterpriseUniversity() bool {
+func isEnterprise() bool {
 	return selectedProductType.Index == 6
 }
 
