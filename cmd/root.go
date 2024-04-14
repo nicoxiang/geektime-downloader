@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
@@ -30,22 +29,23 @@ import (
 )
 
 var (
-	phone               string
-	gcid                string
-	gcess               string
-	concurrency         int
-	downloadFolder      string
-	sp                  *spinner.Spinner
-	selectedProduct     geektime.Product
-	quality             string
-	downloadComments    bool
-	selectedProductType productTypeSelectOption
-	columnOutputType    int
-	waitSeconds         int
-	productTypeOptions  = make([]productTypeSelectOption, 6)
-	geektimeClient      *geektime.Client
-	accountClient       *geektime.Client
-	universityClient    *geektime.Client
+	phone                string
+	gcid                 string
+	gcess                string
+	concurrency          int
+	downloadFolder       string
+	sp                   *spinner.Spinner
+	selectedProduct      geektime.Product
+	quality              string
+	downloadComments     bool
+	selectedProductType  productTypeSelectOption
+	columnOutputType     int
+	waitSeconds          int
+	productTypeOptions   = make([]productTypeSelectOption, 7)
+	geektimeClient       *geektime.Client
+	geekEnterpriseClient *geektime.Client
+	accountClient        *geektime.Client
+	universityClient     *geektime.Client
 )
 
 type productTypeSelectOption struct {
@@ -90,6 +90,7 @@ func setProductTypeOptions() {
 	productTypeOptions[3] = productTypeSelectOption{3, "大厂案例", 4, []string{"q"}, false}
 	productTypeOptions[4] = productTypeSelectOption{4, "训练营", 5, []string{""}, true} //custom source type, not use
 	productTypeOptions[5] = productTypeSelectOption{5, "其他", 1, []string{"x", "c6"}, true}
+	productTypeOptions[6] = productTypeSelectOption{6, "企业版训练营", 6, []string{"c44"}, true}
 }
 
 var rootCmd = &cobra.Command{
@@ -145,6 +146,7 @@ var rootCmd = &cobra.Command{
 		}
 		geektimeClient = geektime.NewClient(readCookies)
 		universityClient = geektime.NewUniversityClient(readCookies)
+		geekEnterpriseClient = geektime.NewEnterpriseClient(readCookies)
 		selectProductType(cmd.Context())
 	},
 }
@@ -232,6 +234,8 @@ func loadProduct(ctx context.Context, productID int) {
 		p, err = universityClient.MyClassProduct(productID)
 		// university don't need check product type
 		// if input invalid id, access mark is 0
+	} else if isEnterpriseUniversity() {
+		p, err = geekEnterpriseClient.EnterpriseArticlesInfo(productID)
 	} else {
 		p, err = geektimeClient.ColumnInfo(productID)
 		if err == nil {
@@ -419,15 +423,24 @@ func handleDownloadAll(ctx context.Context) {
 		}
 	} else {
 		for _, a := range selectedProduct.Articles {
+			sectionDir := projectDir
 			fileName := filenamify.Filenamify(a.Title) + video.TSExtension
 			if _, ok := downloaded[fileName]; ok {
 				continue
 			}
+			// add sub dir
+			if a.SectionTitle != "" {
+				sectionDir, err = mkDownloadProjectSectionDir(projectDir, a.SectionTitle)
+				checkError(err)
+			}
 			if isUniversity() {
-				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, selectedProduct, projectDir, quality, concurrency)
+				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, selectedProduct, sectionDir, quality, concurrency)
+				checkError(err)
+			} else if isEnterpriseUniversity() {
+				err := video.DownloadEnterpriseArticleVideo(ctx, geekEnterpriseClient, a.AID, selectedProductType.SourceType, sectionDir, quality, concurrency)
 				checkError(err)
 			} else {
-				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
+				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, selectedProductType.SourceType, sectionDir, quality, concurrency)
 				checkError(err)
 			}
 		}
@@ -441,7 +454,7 @@ func increasePDFCount(total int, i *int) {
 }
 
 func loadArticles() {
-	if !isUniversity() && len(selectedProduct.Articles) <= 0 {
+	if !isUniversity() && !isEnterpriseUniversity() && len(selectedProduct.Articles) <= 0 {
 		sp.Prefix = "[ 正在加载文章列表... ]"
 		sp.Start()
 		articles, err := geektimeClient.ColumnArticles(strconv.Itoa(selectedProduct.ID))
@@ -513,6 +526,9 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		if isUniversity() {
 			err := video.DownloadUniversityVideo(ctx, universityClient, article.AID, selectedProduct, projectDir, quality, concurrency)
 			checkError(err)
+		} else if isEnterpriseUniversity() {
+			err := video.DownloadEnterpriseArticleVideo(ctx, geekEnterpriseClient, article.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
+			checkError(err)
 		} else {
 			err := video.DownloadArticleVideo(ctx, geektimeClient, article.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
 			checkError(err)
@@ -526,6 +542,10 @@ func isText() bool {
 
 func isUniversity() bool {
 	return selectedProductType.Index == 4
+}
+
+func isEnterpriseUniversity() bool {
+	return selectedProductType.Index == 6
 }
 
 // Sets the bit at pos in the integer n.
@@ -555,17 +575,24 @@ func readCookiesFromInput() []*http.Cookie {
 }
 
 func findDownloadedArticleFileNames(projectDir string) (map[string]struct{}, error) {
-	files, err := ioutil.ReadDir(projectDir)
-	res := make(map[string]struct{}, len(files))
-	if err != nil {
-		return res, err
-	}
-	if len(files) == 0 {
-		return res, nil
-	}
-	for _, f := range files {
-		res[f.Name()] = struct{}{}
-	}
+	res := make(map[string]struct{})
+	limit := 2
+	err := filepath.Walk(projectDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			fmt.Printf("访问路径时出错：%v\n", err)
+			return err
+		}
+		// 计算当前路径的深度
+		depth := len(filepath.SplitList(path)) - len(filepath.SplitList(projectDir))
+		if depth >= limit {
+			return filepath.SkipDir // 如果达到限制深度，则跳过该文件夹及其子文件夹
+		}
+		if !info.IsDir() {
+			res[info.Name()] = struct{}{}
+		}
+		return nil
+	})
+	checkError(err)
 	return res, nil
 }
 
@@ -575,6 +602,15 @@ func mkDownloadProjectDir(downloadFolder, phone, gcid, projectName string) (stri
 		userName = gcid
 	}
 	path := filepath.Join(downloadFolder, userName, filenamify.Filenamify(projectName))
+	err := os.MkdirAll(path, os.ModePerm)
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func mkDownloadProjectSectionDir(downloadFolder, sectionName string) (string, error) {
+	path := filepath.Join(downloadFolder, filenamify.Filenamify(sectionName))
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
 		return "", err
