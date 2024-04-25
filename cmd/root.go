@@ -29,23 +29,20 @@ import (
 )
 
 var (
-	phone                string
-	gcid                 string
-	gcess                string
-	concurrency          int
-	downloadFolder       string
-	sp                   *spinner.Spinner
-	selectedProduct      geektime.Product
-	quality              string
-	downloadComments     bool
-	selectedProductType  productTypeSelectOption
-	columnOutputType     int
-	waitSeconds          int
-	productTypeOptions   = make([]productTypeSelectOption, 7)
-	geektimeClient       *geektime.Client
-	geekEnterpriseClient *geektime.Client
-	accountClient        *geektime.Client
-	universityClient     *geektime.Client
+	phone               string
+	gcid                string
+	gcess               string
+	concurrency         int
+	downloadFolder      string
+	sp                  *spinner.Spinner
+	selectedProduct     geektime.Course
+	quality             string
+	downloadComments    bool
+	selectedProductType productTypeSelectOption
+	columnOutputType    int
+	waitSeconds         int
+	productTypeOptions  = make([]productTypeSelectOption, 7)
+	geektimeClient      *geektime.Client
 )
 
 type productTypeSelectOption struct {
@@ -80,7 +77,6 @@ func init() {
 	rootCmd.MarkFlagsRequiredTogether("gcid", "gcess")
 
 	sp = spinner.New(spinner.CharSets[4], 100*time.Millisecond)
-	accountClient = geektime.NewAccountClient()
 }
 
 func setProductTypeOptions() {
@@ -129,7 +125,7 @@ var rootCmd = &cobra.Command{
 			checkError(err)
 			sp.Prefix = "[ 正在登录... ]"
 			sp.Start()
-			readCookies, err = accountClient.Login(phone, pwd)
+			readCookies, err = geektime.Login(phone, pwd)
 			if err != nil {
 				sp.Stop()
 				checkError(err)
@@ -141,12 +137,11 @@ var rootCmd = &cobra.Command{
 		}
 
 		// first time auth check
-		if err := accountClient.Auth(readCookies); err != nil {
+		if err := geektime.Auth(readCookies); err != nil {
 			checkError(err)
 		}
+
 		geektimeClient = geektime.NewClient(readCookies)
-		universityClient = geektime.NewUniversityClient(readCookies)
-		geekEnterpriseClient = geektime.NewEnterpriseClient(readCookies)
 		selectProductType(cmd.Context())
 	},
 }
@@ -228,16 +223,16 @@ func letInputProductID(ctx context.Context) {
 func loadProduct(ctx context.Context, productID int) {
 	sp.Prefix = "[ 正在加载课程信息... ]"
 	sp.Start()
-	var p geektime.Product
+	var p geektime.Course
 	var err error
 	if isUniversity() {
-		p, err = universityClient.GetUniversityProductInfo(productID)
+		p, err = geektimeClient.UniversityCourseInfo(productID)
 		// university don't need check product type
 		// if input invalid id, access mark is 0
 	} else if isEnterprise() {
-		p, err = geekEnterpriseClient.GetEnterpriseProductInfo(productID)
+		p, err = geektimeClient.EnterpriseCourseInfo(productID)
 	} else {
-		p, err = geektimeClient.GetNormalProductInfo(productID)
+		p, err = geektimeClient.CourseInfo(productID)
 		if err == nil {
 			c := checkProductType(p.Type)
 			// if check product type fail, re-input product
@@ -432,10 +427,10 @@ func handleDownloadAll(ctx context.Context) {
 				checkError(err)
 			}
 			if isUniversity() {
-				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, selectedProduct, sectionDir, quality, concurrency)
+				err := video.DownloadUniversityVideo(ctx, geektimeClient, a.AID, selectedProduct, sectionDir, quality, concurrency)
 				checkError(err)
 			} else if isEnterprise() {
-				err := video.DownloadEnterpriseArticleVideo(ctx, geekEnterpriseClient, a.AID, selectedProductType.SourceType, sectionDir, quality, concurrency)
+				err := video.DownloadEnterpriseArticleVideo(ctx, geektimeClient, a.AID, selectedProductType.SourceType, sectionDir, quality, concurrency)
 				checkError(err)
 			} else {
 				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, selectedProductType.SourceType, sectionDir, quality, concurrency)
@@ -511,10 +506,10 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 		checkError(err)
 	} else {
 		if isUniversity() {
-			err := video.DownloadUniversityVideo(ctx, universityClient, article.AID, selectedProduct, projectDir, quality, concurrency)
+			err := video.DownloadUniversityVideo(ctx, geektimeClient, article.AID, selectedProduct, projectDir, quality, concurrency)
 			checkError(err)
 		} else if isEnterprise() {
-			err := video.DownloadEnterpriseArticleVideo(ctx, geekEnterpriseClient, article.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
+			err := video.DownloadEnterpriseArticleVideo(ctx, geektimeClient, article.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
 			checkError(err)
 		} else {
 			err := video.DownloadArticleVideo(ctx, geektimeClient, article.AID, selectedProductType.SourceType, projectDir, quality, concurrency)

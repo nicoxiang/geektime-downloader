@@ -1,13 +1,10 @@
 package geektime
 
 import (
-	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/go-resty/resty/v2"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime/response"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 const (
@@ -17,28 +14,15 @@ const (
 	V1EnterpriseCourseInfoPath = "/app/v1/course/info"
 	// V1EnterpriseArticlesInfoPath used in enterprise course articles info
 	V1EnterpriseArticlesInfoPath = "/app/v1/course/articles"
-	// V1EnterpriseArticleDetailInfoPath used in enterprise course article detail info
-	V1EnterpriseArticleDetailInfoPath = "/app/v1/article/detail"
+	// V1EnterpriseArticleDetailPath used in enterprise course article detail info
+	V1EnterpriseArticleDetailPath = "/app/v1/article/detail"
 	// V1EnterpriseVideoPlayAuthPath used in enterprise course video play auth
 	V1EnterpriseVideoPlayAuthPath = "/app/v1/source_auth/video_play_auth"
 )
 
-// NewEnterpriseClient init enterprise http client
-func NewEnterpriseClient(cs []*http.Cookie) *Client {
-	httpClient := resty.New().
-		SetCookies(cs).
-		SetRetryCount(1).
-		SetTimeout(10*time.Second).
-		SetHeader("User-Agent", DefaultUserAgent).
-		SetLogger(logger.DiscardLogger{})
-
-	c := &Client{HTTPClient: httpClient, BaseURL: GeekBangEnterpriseBaseURL, Cookies: cs}
-	return c
-}
-
-// GetEnterpriseProductInfo get enterprise course info
-func (c *Client) GetEnterpriseProductInfo(id int) (Product, error) {
-	var p Product
+// EnterpriseCourseInfo get enterprise course info
+func (c *Client) EnterpriseCourseInfo(id int) (Course, error) {
+	var p Course
 	var err error
 	p, err = c.enterpriseCourseInfo(id)
 	if err != nil {
@@ -55,11 +39,13 @@ func (c *Client) GetEnterpriseProductInfo(id int) (Product, error) {
 	return p, nil
 }
 
-// V1EnterpriseArticleDetailInfo get enterprise article detail
-func (c *Client) V1EnterpriseArticleDetailInfo(articleID string) (response.V1EnterpriseArticlesDetailResponse, error) {
+// V1EnterpriseArticleDetail get enterprise article detail
+func (c *Client) V1EnterpriseArticleDetail(articleID string) (response.V1EnterpriseArticlesDetailResponse, error) {
 	var res response.V1EnterpriseArticlesDetailResponse
-	r := c.newRequest(resty.MethodPost,
-		V1EnterpriseArticleDetailInfoPath,
+	r := c.newRequest(
+		resty.MethodPost,
+		GeekBangEnterpriseBaseURL,
+		V1EnterpriseArticleDetailPath,
 		nil,
 		map[string]interface{}{
 			"article_id": articleID,
@@ -75,7 +61,9 @@ func (c *Client) V1EnterpriseArticleDetailInfo(articleID string) (response.V1Ent
 // EnterpriseVideoPlayAuth get enterprise play auth string
 func (c *Client) EnterpriseVideoPlayAuth(articleID, videoID string) (string, error) {
 	var res response.V3VideoPlayAuthResponse
-	r := c.newRequest(resty.MethodPost,
+	r := c.newRequest(
+		resty.MethodPost,
+		GeekBangEnterpriseBaseURL,
 		V1EnterpriseVideoPlayAuthPath,
 		nil,
 		map[string]interface{}{
@@ -90,9 +78,12 @@ func (c *Client) EnterpriseVideoPlayAuth(articleID, videoID string) (string, err
 	return res.Data.PlayAuth, nil
 }
 
-func (c *Client) enterpriseCourseInfo(productID int) (Product, error) {
+func (c *Client) enterpriseCourseInfo(productID int) (Course, error) {
 	var res response.V1EnterpriseProductInfoResponse
-	r := c.newRequest(resty.MethodPost,
+
+	r := c.newRequest(
+		resty.MethodPost,
+		GeekBangEnterpriseBaseURL,
 		V1EnterpriseCourseInfoPath,
 		nil,
 		map[string]interface{}{
@@ -100,11 +91,12 @@ func (c *Client) enterpriseCourseInfo(productID int) (Product, error) {
 		},
 		&res,
 	)
+
 	if _, err := do(r); err != nil {
-		return Product{}, err
+		return Course{}, err
 	}
 
-	return Product{
+	return Course{
 		Access:  res.Data.Extra.IsMyCourse,
 		ID:      productID,
 		Title:   res.Data.Title,
@@ -115,7 +107,9 @@ func (c *Client) enterpriseCourseInfo(productID int) (Product, error) {
 
 func (c *Client) enterpriseCourseArticles(productID int) ([]Article, error) {
 	var res response.V1EnterpriseArticlesResponse
-	r := c.newRequest(resty.MethodPost,
+	r := c.newRequest(
+		resty.MethodPost,
+		GeekBangEnterpriseBaseURL,
 		V1EnterpriseArticlesInfoPath,
 		nil,
 		map[string]interface{}{

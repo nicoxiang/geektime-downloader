@@ -1,12 +1,8 @@
 package geektime
 
 import (
-	"net/http"
-	"time"
-
 	"github.com/go-resty/resty/v2"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime/response"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 const (
@@ -19,25 +15,14 @@ const (
 	UniversityV1MyClassInfoPath = "/serv/v1/myclass/info"
 )
 
-// NewUniversityClient init university http client
-func NewUniversityClient(cs []*http.Cookie) *Client {
-	httpClient := resty.New().
-		SetCookies(cs).
-		SetRetryCount(1).
-		SetTimeout(10*time.Second).
-		SetHeader("User-Agent", DefaultUserAgent).
-		SetLogger(logger.DiscardLogger{})
-
-	c := &Client{HTTPClient: httpClient, BaseURL: GeekBangUniversityBaseURL, Cookies: cs}
-	return c
-}
-
-// GetUniversityProductInfo get university class info
-func (c *Client) GetUniversityProductInfo(classID int) (Product, error) {
-	var p Product
+// UniversityCourseInfo get university class info
+func (c *Client) UniversityCourseInfo(classID int) (Course, error) {
+	var p Course
 
 	var res response.V1MyClassInfoResponse
-	r := c.newRequest(resty.MethodPost,
+	r := c.newRequest(
+		resty.MethodPost,
+		GeekBangUniversityBaseURL,
 		UniversityV1MyClassInfoPath,
 		nil,
 		map[string]interface{}{
@@ -59,7 +44,7 @@ func (c *Client) GetUniversityProductInfo(classID int) (Product, error) {
 		return p, ErrGeekTimeAPIBadCode{UniversityV1MyClassInfoPath, resp.String()}
 	}
 
-	p = Product{
+	p = Course{
 		Access:  true,
 		ID:      classID,
 		Title:   res.Data.Title,
@@ -86,7 +71,9 @@ func (c *Client) GetUniversityProductInfo(classID int) (Product, error) {
 // UniversityVideoPlayAuth get university play auth string
 func (c *Client) UniversityVideoPlayAuth(articleID, classID int) (response.V1VideoPlayAuthResponse, error) {
 	var res response.V1VideoPlayAuthResponse
-	r := c.newRequest(resty.MethodPost,
+	r := c.newRequest(
+		resty.MethodPost,
+		GeekBangUniversityBaseURL,
 		UniversityV1VideoPlayAuthPath,
 		nil,
 		map[string]interface{}{

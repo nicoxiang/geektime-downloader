@@ -87,8 +87,7 @@ func DownloadEnterpriseArticleVideo(ctx context.Context,
 	quality string,
 	concurrency int,
 ) error {
-
-	articleInfo, err := client.V1EnterpriseArticleDetailInfo(strconv.Itoa(articleID))
+	articleInfo, err := client.V1EnterpriseArticleDetail(strconv.Itoa(articleID))
 	if err != nil {
 		return err
 	}
@@ -113,11 +112,10 @@ func DownloadEnterpriseArticleVideo(ctx context.Context,
 func DownloadUniversityVideo(ctx context.Context,
 	client *geektime.Client,
 	articleID int,
-	currentProduct geektime.Product,
+	currentProduct geektime.Course,
 	projectDir string,
 	quality string,
 	concurrency int) error {
-
 	playAuthInfo, err := client.UniversityVideoPlayAuth(articleID, currentProduct.ID)
 	if err != nil {
 		return err
@@ -300,7 +298,7 @@ func addBarValue(bar *pb.ProgressBar, written int64) {
 	}
 }
 
-func getUniversityVideoTitle(articleID int, currentProduct geektime.Product) string {
+func getUniversityVideoTitle(articleID int, currentProduct geektime.Course) string {
 	for _, v := range currentProduct.Articles {
 		if v.AID == articleID {
 			return v.Title
@@ -317,7 +315,7 @@ func extractTSURLPrefix(m3u8url string) string {
 func getPlayInfo(client *geektime.Client, playInfoURL, quality string) (vod.PlayInfo, error) {
 	var getPlayInfoResp GetPlayInfoResponse
 	var playInfo vod.PlayInfo
-	_, err := client.HTTPClient.R().
+	_, err := client.RestyClient.R().
 		SetResult(&getPlayInfoResp).
 		Get(playInfoURL)
 

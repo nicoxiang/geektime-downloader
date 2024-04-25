@@ -121,7 +121,7 @@ func removeConfig(dir, phone string) error {
 			}
 		}
 	}
-	return nil;
+	return nil
 }
 
 func writeOnelineConfig(sb strings.Builder, cookie *http.Cookie) strings.Builder {
