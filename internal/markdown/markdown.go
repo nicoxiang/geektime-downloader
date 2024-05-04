@@ -16,6 +16,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/downloader"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/files"
 )
 
 var (
@@ -37,17 +38,23 @@ func (ms *markdownString) ReplaceAll(o, n string) {
 	ms.s = strings.ReplaceAll(ms.s, o, n)
 }
 
-// Download ...
-func Download(ctx context.Context, html, title, dir string, aid int) error {
+// Download article as markdown
+func Download(ctx context.Context, html, title, dir string, aid int, overwrite bool) (bool, error) {
 	select {
 	case <-ctx.Done():
-		return context.Canceled
+		return false, context.Canceled
 	default:
 	}
+
+	fullName := path.Join(dir, filenamify.Filenamify(title)+MDExtension)
+	if files.CheckFileExists(fullName) && !overwrite {
+		return true, nil
+	}
+
 	// step1: convert to md string
 	markdown, err := getDefaultConverter().ConvertString(html)
 	if err != nil {
-		return err
+		return false, err
 	}
 	// step2: download images
 	var ss = &markdownString{s: markdown}
@@ -63,23 +70,22 @@ func Download(ctx context.Context, html, title, dir string, aid int) error {
 	err = writeImageFile(ctx, imageURLs, dir, imagesFolder, ss)
 
 	if err != nil {
-		return err
+		return false, err
 	}
 
-	fullName := path.Join(dir, filenamify.Filenamify(title)+MDExtension)
 	f, err := os.Create(fullName)
 	defer func() {
 		_ = f.Close()
 	}()
 	if err != nil {
-		return err
+		return false, err
 	}
 	// step3: write md file
 	_, err = f.WriteString("# " + title + "\n" + ss.s)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return false, nil
 }
 
 func findAllImages(md string) (images []string) {

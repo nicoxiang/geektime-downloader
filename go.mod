@@ -1,6 +1,6 @@
 module github.com/nicoxiang/geektime-downloader
 
-go 1.18
+go 1.22
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.5.0

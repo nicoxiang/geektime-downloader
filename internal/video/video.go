@@ -3,7 +3,6 @@ package video
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
@@ -18,6 +17,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/crypto"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/downloader"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/files"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/m3u8"
 	"github.com/nicoxiang/geektime-downloader/internal/video/vod"
 )
@@ -82,7 +82,6 @@ func DownloadArticleVideo(ctx context.Context,
 func DownloadEnterpriseArticleVideo(ctx context.Context,
 	client *geektime.Client,
 	articleID int,
-	sourceType int,
 	projectDir string,
 	quality string,
 	concurrency int,
@@ -164,8 +163,8 @@ func downloadAliyunVodEncryptVideo(ctx context.Context,
 	return download(ctx, tsURLPrefix, videoTitle, projectDir, tsFileNames, []byte(decryptKey), playInfo.Size, isVodEncryptVideo, concurrency)
 }
 
-// DownloadMP4 ...
-func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string) (err error) {
+// DownloadMP4 download MP4 resources in article
+func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string, overwrite bool) (err error) {
 	filenamifyTitle := filenamify.Filenamify(title)
 	videoDir := filepath.Join(projectDir, "videos", filenamifyTitle)
 	if err = os.MkdirAll(videoDir, os.ModePerm); err != nil {
@@ -175,6 +174,10 @@ func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string
 	for _, mp4URL := range mp4URLs {
 		u, _ := url.Parse(mp4URL)
 		dst := filepath.Join(videoDir, path.Base(u.Path))
+
+		if files.CheckFileExists(dst) && !overwrite {
+			continue
+		}
 
 		headers := make(map[string]string, 2)
 		headers[geektime.Origin] = geektime.DefaultBaseURL
@@ -238,7 +241,7 @@ func download(ctx context.Context,
 }
 
 func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte, isVodEncryptVideo bool) error {
-	tempTSFiles, err := ioutil.ReadDir(tempVideoDir)
+	tempTSFiles, err := os.ReadDir(tempVideoDir)
 	if err != nil {
 		return err
 	}
@@ -251,7 +254,7 @@ func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte, 
 		return err
 	}
 	for _, tempTSFile := range tempTSFiles {
-		f, err := ioutil.ReadFile(filepath.Join(tempVideoDir, tempTSFile.Name()))
+		f, err := os.ReadFile(filepath.Join(tempVideoDir, tempTSFile.Name()))
 		if err != nil {
 			return err
 		}

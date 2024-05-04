@@ -17,3 +17,5 @@
 .vscode
 
 dist/
+
+.idea
