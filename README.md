@@ -1,6 +1,6 @@
 # geektime-downloader
 
-geektime-downloader 支持下载以下极客时间网站资源.
+geektime-downloader 支持下载以下极客时间网站资源。
 
 **极客时间**
 - [x] 专栏(PDF/Markdown/音频)
@@ -17,7 +17,7 @@ geektime-downloader 支持下载以下极客时间网站资源.
 - [ ] 生态课
 - [x] 训练营视频
 
-部分资源暂未支持下载，欢迎PR.
+部分资源暂未支持下载，欢迎PR。
 
 
 [![go report card](https://goreportcard.com/badge/github.com/nicoxiang/geektime-downloader "go report card")](https://goreportcard.com/report/github.com/nicoxiang/geektime-downloader)
@@ -67,17 +67,18 @@ Usage:
   geektime-downloader [flags]
 
 Flags:
-      --comments           是否需要专栏的第一页评论 (default true)
-      --enterprise         是否下载企业版极客时间资源
-  -f, --folder string      专栏和视频课的下载目标位置 (default "C:\\Users\\nico\\geektime-downloader")
-      --gcess string       极客时间 cookie 值 gcess
-      --gcid string        极客时间 cookie 值 gcid
-  -h, --help               help for geektime-downloader
-      --interval int       下载资源的间隔时间, 单位为秒, 默认1秒 (default 1)
-      --output int         专栏的输出内容(1pdf,2markdown,4audio)可自由组合 (default 1)
-  -u, --phone string       你的极客时间账号(手机号)
-  -q, --quality string     下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
-      --wait-seconds int   Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒 (default 8)
+      --comments                是否需要专栏的第一页评论 (default true)
+      --enterprise              是否下载企业版极客时间资源
+  -f, --folder string           专栏和视频课的下载目标位置 (default "C:\\Users\\nico\\geektime-downloader")
+      --gcess string            极客时间 cookie 值 gcess
+      --gcid string             极客时间 cookie 值 gcid
+  -h, --help                    help for geektime-downloader
+      --interval int            下载资源的间隔时间, 单位为秒, 默认1秒 (default 1)
+      --output int              专栏的输出内容(1pdf,2markdown,4audio)可自由组合 (default 1)
+  -u, --phone string            你的极客时间账号(手机号)
+      --print-pdf-timeout int   Chrome生成PDF的超时时间, 单位为秒, 默认60秒 (default 60)
+      --print-pdf-wait int      Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒 (default 8)
+  -q, --quality string          下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
 ```
 
 ## Note
@@ -145,7 +146,10 @@ https://b.geekbang.org/mall/product/100618109
 ```
 
 ### 为什么我下载的PDF是空白页?
-首先下载课程请保证VPN已关闭。在此前提下如果仍然出现空白页情况，说明后台Chrome网页加载速度较慢，可以尝试加大--wait-seconds参数，保证页面完全加载完成后再开始生成PDF。
+首先下载课程请保证VPN已关闭。在此前提下如果仍然出现空白页情况，说明后台Chrome网页加载速度较慢，可以尝试加大--print-pdf-wait参数，保证页面完全加载完成后再开始生成PDF。
+
+### 为什么我下载PDF一直提示超时?
+首先下载课程请保证VPN已关闭。在此前提下如果下载持续出现超时，有可能是因为课程章节图片等内容较多，生成速度慢，比如课程《AI 绘画核心技术与实战》中的部分章节，可以尝试加大--print-pdf-timeout参数，并耐心等待。
 
 ### 如何下载专栏的 Markdown 格式和文章音频?
 

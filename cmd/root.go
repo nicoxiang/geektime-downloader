@@ -30,23 +30,24 @@ import (
 )
 
 var (
-	phone               string
-	gcid                string
-	gcess               string
-	concurrency         int
-	downloadFolder      string
-	sp                  *spinner.Spinner
-	selectedProduct     geektime.Course
-	quality             string
-	downloadComments    bool
-	selectedProductType productTypeSelectOption
-	columnOutputType    int
-	waitSeconds         int
-	interval            int
-	productTypeOptions  []productTypeSelectOption
-	geektimeClient      *geektime.Client
-	isEnterprise        bool
-	waitRand            = rand.New(rand.NewSource(time.Now().UnixNano()))
+	phone                  string
+	gcid                   string
+	gcess                  string
+	concurrency            int
+	downloadFolder         string
+	sp                     *spinner.Spinner
+	selectedProduct        geektime.Course
+	quality                string
+	downloadComments       bool
+	selectedProductType    productTypeSelectOption
+	columnOutputType       int
+	printPDFWaitSeconds    int
+	printPDFTimeoutSeconds int
+	interval               int
+	productTypeOptions     []productTypeSelectOption
+	geektimeClient         *geektime.Client
+	isEnterprise           bool
+	waitRand               = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 type productTypeSelectOption struct {
@@ -74,7 +75,8 @@ func init() {
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
 	rootCmd.Flags().IntVar(&columnOutputType, "output", 1, "专栏的输出内容(1pdf,2markdown,4audio)可自由组合")
-	rootCmd.Flags().IntVar(&waitSeconds, "wait-seconds", 8, "Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒")
+	rootCmd.Flags().IntVar(&printPDFWaitSeconds, "print-pdf-wait", 8, "Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒")
+	rootCmd.Flags().IntVar(&printPDFTimeoutSeconds, "print-pdf-timeout", 60, "Chrome生成PDF的超时时间, 单位为秒, 默认60秒")
 	rootCmd.Flags().IntVar(&interval, "interval", 1, "下载资源的间隔时间, 单位为秒, 默认1秒")
 	rootCmd.Flags().BoolVar(&isEnterprise, "enterprise", false, "是否下载企业版极客时间资源")
 
@@ -416,7 +418,8 @@ func downloadTextArticle(ctx context.Context, article geektime.Article, projectD
 			article.Title,
 			geektimeClient.Cookies,
 			downloadComments,
-			waitSeconds,
+			printPDFWaitSeconds,
+			printPDFTimeoutSeconds,
 			overwrite,
 		)
 		if !innerSkipped {
