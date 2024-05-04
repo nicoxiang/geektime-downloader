@@ -1,6 +1,24 @@
 # geektime-downloader
 
-geektime-downloader 支持下载极客时间专栏(PDF/Markdown/音频)/视频课/每日一课/大厂实践/训练营视频。
+geektime-downloader 支持下载以下极客时间网站资源.
+
+**极客时间**
+- [x] 专栏(PDF/Markdown/音频)
+- [x] 视频课
+- [x] 每日一课
+- [x] 大厂案例
+- [x] 训练营视频
+- [ ] 线下大会
+
+**企业版极客时间**
+- [ ] 体系课
+- [ ] 每日一课
+- [ ] 大厂案例
+- [ ] 生态课
+- [x] 训练营视频
+
+部分资源暂未支持下载，欢迎PR.
+
 
 [![go report card](https://goreportcard.com/badge/github.com/nicoxiang/geektime-downloader "go report card")](https://goreportcard.com/report/github.com/nicoxiang/geektime-downloader)
 [![MIT license](https://img.shields.io/badge/license-MIT-brightgreen.svg)](https://opensource.org/licenses/MIT)
@@ -49,14 +67,16 @@ Usage:
   geektime-downloader [flags]
 
 Flags:
-      --comments         是否需要专栏的第一页评论 (default true)
-  -f, --folder string    专栏和视频课的下载目标位置 (default "")
-      --gcess string     极客时间 cookie 值 gcess
-      --gcid string      极客时间 cookie 值 gcid
-  -h, --help             help for geektime-downloader
-      --output int       专栏的输出内容(1pdf,2markdown,4audio)可自由组合 (default 1)
-  -u, --phone string     你的极客时间账号(手机号)
-  -q, --quality string   下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
+      --comments           是否需要专栏的第一页评论 (default true)
+      --enterprise         是否下载企业版极客时间资源
+  -f, --folder string      专栏和视频课的下载目标位置 (default "C:\\Users\\nico\\geektime-downloader")
+      --gcess string       极客时间 cookie 值 gcess
+      --gcid string        极客时间 cookie 值 gcid
+  -h, --help               help for geektime-downloader
+      --interval int       下载资源的间隔时间, 单位为秒, 默认1秒 (default 1)
+      --output int         专栏的输出内容(1pdf,2markdown,4audio)可自由组合 (default 1)
+  -u, --phone string       你的极客时间账号(手机号)
+  -q, --quality string     下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
       --wait-seconds int   Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒 (default 8)
 ```
 
@@ -110,10 +130,18 @@ https://time.geekbang.org/opencourse/videointro/100546701
 
 **其他：**
 
-打开极客时间[我的课程-其他](https://time.geekbang.org/dashboard/course)，选择你想要查看的会议，在新打开的会议详情 Tab 页，查看 URL ```course/intro/``` 最后的数字，例如下面的链接中 100551201 就是课程 ID：
+打开极客时间[我的课程-其他](https://time.geekbang.org/dashboard/course)，选择你想要查看的课程，在新打开的课程详情 Tab 页，查看 URL ```course/intro/``` 最后的数字，例如下面的链接中 100551201 就是课程 ID：
 
 ```
 https://time.geekbang.org/course/intro/100551201
+```
+
+**企业版训练营：**
+
+选择你想要查看的课程，查看 URL ```mall/product/```后的数字，例如下面的链接中 100618109 就是课程 ID：
+
+```
+https://b.geekbang.org/mall/product/100618109
 ```
 
 ### 为什么我下载的PDF是空白页?
