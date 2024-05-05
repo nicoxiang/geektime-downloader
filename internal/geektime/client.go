@@ -85,18 +85,26 @@ func (c *Client) newRequest(
 }
 
 // do perform http request
-func do(r *resty.Request) (*resty.Response, error) {
-	logger.Infof("Http request start, method: %s, url: %s",
-		r.Method,
-		r.URL,
+func do(request *resty.Request) (*resty.Response, error) {
+	logger.Infof("Http request start, method: %s, url: %s, request body: %v",
+		request.Method,
+		request.URL,
+		request.Body,
 	)
-	resp, err := r.Execute(r.Method, r.URL)
+	resp, err := request.Execute(request.Method, request.URL)
 
 	if err != nil {
 		return nil, err
 	}
 
 	statusCode := resp.RawResponse.StatusCode
+
+	logger.Infof("Http request end, method: %s, url: %s, status code: %d",
+		resp.RawResponse.Request.Method,
+		resp.RawResponse.Request.URL,
+		resp.RawResponse.StatusCode,
+	)
+
 	if statusCode != 200 {
 		logNotOkResponse(resp)
 		if statusCode == 451 {
@@ -106,7 +114,7 @@ func do(r *resty.Request) (*resty.Response, error) {
 		}
 	}
 
-	rv := reflect.ValueOf(r.Result)
+	rv := reflect.ValueOf(request.Result)
 	f := reflect.Indirect(rv).FieldByName("Code")
 	code := int(f.Int())
 
@@ -120,14 +128,9 @@ func do(r *resty.Request) (*resty.Response, error) {
 		return nil, ErrAuthFailed
 	}
 
-	return nil, ErrGeekTimeAPIBadCode{r.URL, resp.String()}
+	return nil, ErrGeekTimeAPIBadCode{request.URL, resp.String()}
 }
 
 func logNotOkResponse(resp *resty.Response) {
-	logger.Warnf("Http request end, method: %s, url: %s, status code: %d, response body: %s",
-		resp.RawResponse.Request.Method,
-		resp.RawResponse.Request.URL,
-		resp.RawResponse.StatusCode,
-		resp.String(),
-	)
+	logger.Warnf("Http request not ok, response body: %s", resp.String())
 }
