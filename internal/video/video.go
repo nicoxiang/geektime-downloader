@@ -3,11 +3,11 @@ package video
 import (
 	"context"
 	"fmt"
-	"io/ioutil"
 	"net/url"
 	"os"
 	"path"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -17,12 +17,14 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/crypto"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/downloader"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/files"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/m3u8"
 	"github.com/nicoxiang/geektime-downloader/internal/video/vod"
 )
 
 const (
 	// syncByte = uint8(71) //0x47
+
 	// TSExtension ...
 	TSExtension = ".ts"
 )
@@ -76,15 +78,43 @@ func DownloadArticleVideo(ctx context.Context,
 		concurrency)
 }
 
+// DownloadEnterpriseArticleVideo download enterprise video
+func DownloadEnterpriseArticleVideo(ctx context.Context,
+	client *geektime.Client,
+	articleID int,
+	projectDir string,
+	quality string,
+	concurrency int,
+) error {
+	articleInfo, err := client.V1EnterpriseArticleDetail(strconv.Itoa(articleID))
+	if err != nil {
+		return err
+	}
+	if articleInfo.Data.Video.ID == "" {
+		return nil
+	}
+	playAuth, err := client.EnterpriseVideoPlayAuth(strconv.Itoa(articleID), articleInfo.Data.Video.ID)
+	if err != nil {
+		return err
+	}
+	return downloadAliyunVodEncryptVideo(ctx,
+		client,
+		playAuth,
+		articleInfo.Data.Article.Title,
+		projectDir,
+		quality,
+		articleInfo.Data.Video.ID,
+		concurrency)
+}
+
 // DownloadUniversityVideo ...
 func DownloadUniversityVideo(ctx context.Context,
 	client *geektime.Client,
 	articleID int,
-	currentProduct geektime.Product,
+	currentProduct geektime.Course,
 	projectDir string,
 	quality string,
 	concurrency int) error {
-
 	playAuthInfo, err := client.UniversityVideoPlayAuth(articleID, currentProduct.ID)
 	if err != nil {
 		return err
@@ -133,8 +163,8 @@ func downloadAliyunVodEncryptVideo(ctx context.Context,
 	return download(ctx, tsURLPrefix, videoTitle, projectDir, tsFileNames, []byte(decryptKey), playInfo.Size, isVodEncryptVideo, concurrency)
 }
 
-// DownloadMP4 ...
-func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string) (err error) {
+// DownloadMP4 download MP4 resources in article
+func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string, overwrite bool) (err error) {
 	filenamifyTitle := filenamify.Filenamify(title)
 	videoDir := filepath.Join(projectDir, "videos", filenamifyTitle)
 	if err = os.MkdirAll(videoDir, os.ModePerm); err != nil {
@@ -144,6 +174,10 @@ func DownloadMP4(ctx context.Context, title, projectDir string, mp4URLs []string
 	for _, mp4URL := range mp4URLs {
 		u, _ := url.Parse(mp4URL)
 		dst := filepath.Join(videoDir, path.Base(u.Path))
+
+		if files.CheckFileExists(dst) && !overwrite {
+			continue
+		}
 
 		headers := make(map[string]string, 2)
 		headers[geektime.Origin] = geektime.DefaultBaseURL
@@ -185,12 +219,12 @@ func download(ctx context.Context,
 	for _, tsFileName := range tsFileNames {
 		u := tsURLPrefix + tsFileName
 		dst := filepath.Join(tempVideoDir, tsFileName)
-		
+
 		headers := make(map[string]string, 2)
 		headers[geektime.Origin] = geektime.DefaultBaseURL
 		headers[geektime.UserAgent] = geektime.DefaultUserAgent
-		
-		fileSize, err := downloader.DownloadFileConcurrently(ctx, dst, u, headers, 5)
+
+		fileSize, err := downloader.DownloadFileConcurrently(ctx, dst, u, headers, concurrency)
 		if err != nil {
 			return err
 		}
@@ -207,7 +241,7 @@ func download(ctx context.Context,
 }
 
 func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte, isVodEncryptVideo bool) error {
-	tempTSFiles, err := ioutil.ReadDir(tempVideoDir)
+	tempTSFiles, err := os.ReadDir(tempVideoDir)
 	if err != nil {
 		return err
 	}
@@ -220,7 +254,7 @@ func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte, 
 		return err
 	}
 	for _, tempTSFile := range tempTSFiles {
-		f, err := ioutil.ReadFile(filepath.Join(tempVideoDir, tempTSFile.Name()))
+		f, err := os.ReadFile(filepath.Join(tempVideoDir, tempTSFile.Name()))
 		if err != nil {
 			return err
 		}
@@ -267,7 +301,7 @@ func addBarValue(bar *pb.ProgressBar, written int64) {
 	}
 }
 
-func getUniversityVideoTitle(articleID int, currentProduct geektime.Product) string {
+func getUniversityVideoTitle(articleID int, currentProduct geektime.Course) string {
 	for _, v := range currentProduct.Articles {
 		if v.AID == articleID {
 			return v.Title
@@ -284,7 +318,7 @@ func extractTSURLPrefix(m3u8url string) string {
 func getPlayInfo(client *geektime.Client, playInfoURL, quality string) (vod.PlayInfo, error) {
 	var getPlayInfoResp GetPlayInfoResponse
 	var playInfo vod.PlayInfo
-	_, err := client.HTTPClient.R().
+	_, err := client.RestyClient.R().
 		SetResult(&getPlayInfoResp).
 		Get(playInfoURL)
 

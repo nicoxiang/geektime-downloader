@@ -15,7 +15,7 @@ var (
 
 // Parse do m3u8 url GET request, and extract ts file names and check if it's encrypt video
 func Parse(client *geektime.Client, m3u8url string) (tsFileNames []string, isVodEncryptVideo bool, err error) {
-	m3u8Resp, err := client.HTTPClient.R().SetDoNotParseResponse(true).Get(m3u8url)
+	m3u8Resp, err := client.RestyClient.R().SetDoNotParseResponse(true).Get(m3u8url)
 	if err != nil {
 		return nil, false, err
 	}

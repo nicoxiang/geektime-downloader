@@ -2,7 +2,6 @@ package config
 
 import (
 	"errors"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -26,7 +25,7 @@ func init() {
 // ReadCookieFromConfigFile read cookies from app config file.
 func ReadCookieFromConfigFile(phone string) ([]*http.Cookie, error) {
 	dir := filepath.Join(userConfigDir, GeektimeDownloaderFolder)
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
@@ -45,7 +44,7 @@ func ReadCookieFromConfigFile(phone string) ([]*http.Cookie, error) {
 			fullName := filepath.Join(userConfigDir, GeektimeDownloaderFolder, fi.Name())
 			var cookies []*http.Cookie
 
-			data, err := ioutil.ReadFile(fullName)
+			data, err := os.ReadFile(fullName)
 			if err != nil {
 				return nil, err
 			}
@@ -79,9 +78,9 @@ func WriteCookieToConfigFile(phone string, cookies []*http.Cookie) error {
 	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
 		return err
 	}
-	removeConfig(dir, phone)
+	_ = removeConfig(dir, phone)
 
-	file, err := ioutil.TempFile(dir, phone)
+	file, err := os.CreateTemp(dir, phone)
 	if err != nil {
 		return err
 	}
@@ -103,7 +102,7 @@ func RemoveConfig(phone string) error {
 }
 
 func removeConfig(dir, phone string) error {
-	files, err := ioutil.ReadDir(dir)
+	files, err := os.ReadDir(dir)
 	if err != nil {
 		return err
 	}
@@ -121,7 +120,7 @@ func removeConfig(dir, phone string) error {
 			}
 		}
 	}
-	return nil;
+	return nil
 }
 
 func writeOnelineConfig(sb strings.Builder, cookie *http.Cookie) strings.Builder {

@@ -41,14 +41,14 @@ func (f *customFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	return []byte(message), nil
 }
 
-func init(){
+func init() {
 	userConfigDir, _ := os.UserConfigDir()
-	logFilePath := filepath.Join(userConfigDir, GeektimeLogFolder, GeektimeLogFolder + ".log")
+	logFilePath := filepath.Join(userConfigDir, GeektimeLogFolder, GeektimeLogFolder+".log")
 
 	logger.SetReportCaller(true)
 	logger.SetLevel(logrus.InfoLevel)
 	logger.SetFormatter(&customFormatter{})
-	logFile, err := os.OpenFile(logFilePath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0666)
+	logFile, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
 	if err == nil {
 		logger.Out = logFile
 	} else {
@@ -68,10 +68,10 @@ func Warnf(format string, args ...interface{}) {
 }
 
 // Error wrapper logrus log.Error
-func Error(err error, args ...interface{}){
-	if err != nil{
+func Error(err error, args ...interface{}) {
+	if err != nil {
 		logger.WithError(err).Error(args...)
-	}else{
+	} else {
 		logger.Error(args...)
 	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"math"
 	"math/rand"
 	"net/http"
@@ -24,29 +23,31 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/markdown"
 	"github.com/nicoxiang/geektime-downloader/internal/pdf"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/files"
 	"github.com/nicoxiang/geektime-downloader/internal/video"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/html"
 )
 
 var (
-	phone               string
-	gcid                string
-	gcess               string
-	concurrency         int
-	downloadFolder      string
-	sp                  *spinner.Spinner
-	selectedProduct     geektime.Product
-	quality             string
-	downloadComments    bool
-	selectedProductType productTypeSelectOption
-	columnOutputType    int
-	waitSeconds         int
-	interval            int
-	productTypeOptions  = make([]productTypeSelectOption, 6)
-	geektimeClient      *geektime.Client
-	accountClient       *geektime.Client
-	universityClient    *geektime.Client
+	phone                  string
+	gcid                   string
+	gcess                  string
+	concurrency            int
+	downloadFolder         string
+	sp                     *spinner.Spinner
+	selectedProduct        geektime.Course
+	quality                string
+	downloadComments       bool
+	selectedProductType    productTypeSelectOption
+	columnOutputType       int
+	printPDFWaitSeconds    int
+	printPDFTimeoutSeconds int
+	interval               int
+	productTypeOptions     []productTypeSelectOption
+	geektimeClient         *geektime.Client
+	isEnterprise           bool
+	waitRand               = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
 type productTypeSelectOption struct {
@@ -66,7 +67,7 @@ func init() {
 	userHomeDir, _ := os.UserHomeDir()
 	concurrency = int(math.Ceil(float64(runtime.NumCPU()) / 2.0))
 	defaultDownloadFolder := filepath.Join(userHomeDir, config.GeektimeDownloaderFolder)
-	setProductTypeOptions()
+
 	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)")
 	rootCmd.Flags().StringVar(&gcid, "gcid", "", "极客时间 cookie 值 gcid")
 	rootCmd.Flags().StringVar(&gcess, "gcess", "", "极客时间 cookie 值 gcess")
@@ -74,24 +75,29 @@ func init() {
 	rootCmd.Flags().StringVarP(&quality, "quality", "q", "sd", "下载视频清晰度(ld标清,sd高清,hd超清)")
 	rootCmd.Flags().BoolVar(&downloadComments, "comments", true, "是否需要专栏的第一页评论")
 	rootCmd.Flags().IntVar(&columnOutputType, "output", 1, "专栏的输出内容(1pdf,2markdown,4audio)可自由组合")
-	rootCmd.Flags().IntVar(&waitSeconds, "wait-seconds", 8, "Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒")
-	rootCmd.Flags().IntVar(&interval, "interval", 0, "下载视频的间隔时间, 单位为秒, 默认0秒")
+	rootCmd.Flags().IntVar(&printPDFWaitSeconds, "print-pdf-wait", 8, "Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒")
+	rootCmd.Flags().IntVar(&printPDFTimeoutSeconds, "print-pdf-timeout", 60, "Chrome生成PDF的超时时间, 单位为秒, 默认60秒")
+	rootCmd.Flags().IntVar(&interval, "interval", 1, "下载资源的间隔时间, 单位为秒, 默认1秒")
+	rootCmd.Flags().BoolVar(&isEnterprise, "enterprise", false, "是否下载企业版极客时间资源")
 
 	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcid")
 	rootCmd.MarkFlagsMutuallyExclusive("phone", "gcess")
 	rootCmd.MarkFlagsRequiredTogether("gcid", "gcess")
 
 	sp = spinner.New(spinner.CharSets[4], 100*time.Millisecond)
-	accountClient = geektime.NewAccountClient()
 }
 
 func setProductTypeOptions() {
-	productTypeOptions[0] = productTypeSelectOption{0, "普通课程", 1, []string{"c1", "c3"}, true}
-	productTypeOptions[1] = productTypeSelectOption{1, "每日一课", 2, []string{"d"}, false}
-	productTypeOptions[2] = productTypeSelectOption{2, "公开课", 1, []string{"p35", "p29", "p30"}, true}
-	productTypeOptions[3] = productTypeSelectOption{3, "大厂案例", 4, []string{"q"}, false}
-	productTypeOptions[4] = productTypeSelectOption{4, "训练营", 5, []string{""}, true} // custom source type, not use
-	productTypeOptions[5] = productTypeSelectOption{5, "其他", 1, []string{"x", "c6"}, true}
+	if isEnterprise {
+		productTypeOptions = append(productTypeOptions, productTypeSelectOption{0, "训练营", 5, []string{"c44"}, true}) //custom source type, not use
+	} else {
+		productTypeOptions = append(productTypeOptions, productTypeSelectOption{0, "普通课程", 1, []string{"c1", "c3"}, true})
+		productTypeOptions = append(productTypeOptions, productTypeSelectOption{1, "每日一课", 2, []string{"d"}, false})
+		productTypeOptions = append(productTypeOptions, productTypeSelectOption{2, "公开课", 1, []string{"p35", "p29", "p30"}, true})
+		productTypeOptions = append(productTypeOptions, productTypeSelectOption{3, "大厂案例", 4, []string{"q"}, false})
+		productTypeOptions = append(productTypeOptions, productTypeSelectOption{4, "训练营", 5, []string{""}, true}) //custom source type, not use
+		productTypeOptions = append(productTypeOptions, productTypeSelectOption{5, "其他", 1, []string{"x", "c6"}, true})
+	}
 }
 
 var rootCmd = &cobra.Command{
@@ -130,7 +136,7 @@ var rootCmd = &cobra.Command{
 			checkError(err)
 			sp.Prefix = "[ 正在登录... ]"
 			sp.Start()
-			readCookies, err = accountClient.Login(phone, pwd)
+			readCookies, err = geektime.Login(phone, pwd)
 			if err != nil {
 				sp.Stop()
 				checkError(err)
@@ -142,11 +148,12 @@ var rootCmd = &cobra.Command{
 		}
 
 		// first time auth check
-		if err := accountClient.Auth(readCookies); err != nil {
+		if err := geektime.Auth(readCookies); err != nil {
 			checkError(err)
 		}
+
 		geektimeClient = geektime.NewClient(readCookies)
-		universityClient = geektime.NewUniversityClient(readCookies)
+		setProductTypeOptions()
 		selectProductType(cmd.Context())
 	},
 }
@@ -228,14 +235,17 @@ func letInputProductID(ctx context.Context) {
 func loadProduct(ctx context.Context, productID int) {
 	sp.Prefix = "[ 正在加载课程信息... ]"
 	sp.Start()
-	var p geektime.Product
+	var p geektime.Course
 	var err error
 	if isUniversity() {
-		p, err = universityClient.MyClassProduct(productID)
 		// university don't need check product type
 		// if input invalid id, access mark is 0
+		p, err = geektimeClient.UniversityCourseInfo(productID)
+	} else if isEnterprise {
+		// TODO: check enterprise course type
+		p, err = geektimeClient.EnterpriseCourseInfo(productID)
 	} else {
-		p, err = geektimeClient.ColumnInfo(productID)
+		p, err = geektimeClient.CourseInfo(productID)
 		if err == nil {
 			c := checkProductType(p.Type)
 			// if check product type fail, re-input product
@@ -295,7 +305,6 @@ func productOps(ctx context.Context) {
 }
 
 func selectArticle(ctx context.Context) {
-	loadArticles()
 	items := []geektime.Article{
 		{
 			AID:   -1,
@@ -337,189 +346,137 @@ func handleSelectArticle(ctx context.Context, index int) {
 }
 
 func handleDownloadAll(ctx context.Context) {
-	loadArticles()
 	projectDir, err := mkDownloadProjectDir(downloadFolder, phone, gcid, selectedProduct.Title)
 	checkError(err)
-	downloaded, err := findDownloadedArticleFileNames(projectDir)
-	checkError(err)
 	if isText() {
-		rand.Seed(time.Now().UnixNano())
 		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", selectedProduct.Title)
 		total := len(selectedProduct.Articles)
 		var i int
 
-		needDownloadPDF := columnOutputType&1 == 1
-		needDownloadMD := (columnOutputType>>1)&1 == 1
-		needDownloadAudio := (columnOutputType>>2)&1 == 1
-
-		for _, a := range selectedProduct.Articles {
-			fileName := filenamify.Filenamify(a.Title)
-			var b int
-			if _, exists := downloaded[fileName+pdf.PDFExtension]; exists {
-				b = setBit(b, 0)
+		for _, article := range selectedProduct.Articles {
+			skipped := downloadTextArticle(ctx, article, projectDir, false)
+			increaseDownloadedTextArticleCount(total, &i)
+			if !skipped {
+				waitRandomTime()
 			}
-			if _, exists := downloaded[fileName+markdown.MDExtension]; exists {
-				b = setBit(b, 1)
-			}
-			if _, exists := downloaded[fileName+audio.MP3Extension]; exists {
-				b = setBit(b, 2)
-			}
-
-			if b == columnOutputType {
-				increasePDFCount(total, &i)
-				continue
-			}
-
-			articleInfo, err := geektimeClient.V1ArticleInfo(a.AID)
-			checkError(err)
-
-			hasVideo, videoURL := getVideoURLFromArticleContent(articleInfo.Data.ArticleContent)
-
-			if hasVideo && videoURL != "" {
-				err = video.DownloadMP4(ctx, a.Title, projectDir, []string{videoURL})
-			}
-
-			if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
-				videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
-				for i, v := range articleInfo.Data.InlineVideoSubtitles {
-					videoURLs[i] = v.VideoURL
-				}
-				err = video.DownloadMP4(ctx, a.Title, projectDir, videoURLs)
-			}
-
-			if needDownloadPDF {
-				err = pdf.PrintArticlePageToPDF(ctx,
-					a.AID,
-					projectDir,
-					a.Title,
-					geektimeClient.Cookies,
-					downloadComments,
-					waitSeconds,
-				)
-				if err != nil {
-					checkError(err)
-				}
-			}
-
-			if needDownloadMD {
-				err = markdown.Download(ctx,
-					articleInfo.Data.ArticleContent,
-					a.Title,
-					projectDir,
-					a.AID)
-			}
-
-			if needDownloadAudio {
-				err = audio.DownloadAudio(ctx, articleInfo.Data.AudioDownloadURL, projectDir, a.Title)
-			}
-
-			checkError(err)
-
-			increasePDFCount(total, &i)
-			waitRandomTime()
 		}
 	} else {
-		for _, a := range selectedProduct.Articles {
-			fileName := filenamify.Filenamify(a.Title) + video.TSExtension
-			if _, ok := downloaded[fileName]; ok {
-				continue
+		for _, article := range selectedProduct.Articles {
+			skipped := downloadVideoArticle(ctx, article, projectDir, false)
+			if !skipped {
+				waitRandomTime()
 			}
-			if isUniversity() {
-				err := video.DownloadUniversityVideo(ctx, universityClient, a.AID, selectedProduct, projectDir, quality, concurrency)
-				checkError(err)
-			} else {
-				err := video.DownloadArticleVideo(ctx, geektimeClient, a.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
-				checkError(err)
-			}
-			waitRandomTime()
 		}
 	}
 	selectProductType(ctx)
 }
 
-func increasePDFCount(total int, i *int) {
-	(*i)++
+func increaseDownloadedTextArticleCount(total int, i *int) {
+	*i++
 	fmt.Printf("\r已完成下载%d/%d", *i, total)
-}
-
-func loadArticles() {
-	if !isUniversity() && len(selectedProduct.Articles) <= 0 {
-		sp.Prefix = "[ 正在加载文章列表... ]"
-		sp.Start()
-		articles, err := geektimeClient.ColumnArticles(strconv.Itoa(selectedProduct.ID))
-		checkError(err)
-		selectedProduct.Articles = articles
-		sp.Stop()
-	}
 }
 
 func downloadArticle(ctx context.Context, article geektime.Article, projectDir string) {
 	if isText() {
-		needDownloadPDF := columnOutputType&1 == 1
-		needDownloadMD := (columnOutputType>>1)&1 == 1
-		needDownloadAudio := (columnOutputType>>2)&1 == 1
-
-		articleInfo, err := geektimeClient.V1ArticleInfo(article.AID)
-		checkError(err)
-
 		sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》... ]", article.Title)
-		hasVideo, videoURL := getVideoURLFromArticleContent(articleInfo.Data.ArticleContent)
-		if len(articleInfo.Data.InlineVideoSubtitles) > 0 || hasVideo && videoURL != "" {
-			sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》, 该文章中包含视频, 请耐心等待... ]", article.Title)
-		}
 		sp.Start()
+		defer sp.Stop()
+		downloadTextArticle(ctx, article, projectDir, true)
+	} else {
+		downloadVideoArticle(ctx, article, projectDir, true)
+	}
+}
 
-		if hasVideo && videoURL != "" {
-			err = video.DownloadMP4(ctx, article.Title, projectDir, []string{videoURL})
+func downloadTextArticle(ctx context.Context, article geektime.Article, projectDir string, overwrite bool) bool {
+	needDownloadPDF := columnOutputType&1 == 1
+	needDownloadMD := (columnOutputType>>1)&1 == 1
+	needDownloadAudio := (columnOutputType>>2)&1 == 1
+	skipped := true
+
+	articleInfo, err := geektimeClient.V1ArticleInfo(article.AID)
+	checkError(err)
+
+	hasVideo, videoURL := getVideoURLFromArticleContent(articleInfo.Data.ArticleContent)
+	if hasVideo && videoURL != "" {
+		err = video.DownloadMP4(ctx, article.Title, projectDir, []string{videoURL}, overwrite)
+		checkError(err)
+	}
+
+	if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
+		videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
+		for i, v := range articleInfo.Data.InlineVideoSubtitles {
+			videoURLs[i] = v.VideoURL
 		}
+		err = video.DownloadMP4(ctx, article.Title, projectDir, videoURLs, overwrite)
+		checkError(err)
+	}
 
-		if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
-			videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
-			for i, v := range articleInfo.Data.InlineVideoSubtitles {
-				videoURLs[i] = v.VideoURL
-			}
-			err = video.DownloadMP4(ctx, article.Title, projectDir, videoURLs)
+	if needDownloadPDF {
+		innerSkipped, err := pdf.PrintArticlePageToPDF(ctx,
+			article.AID,
+			projectDir,
+			article.Title,
+			geektimeClient.Cookies,
+			downloadComments,
+			printPDFWaitSeconds,
+			printPDFTimeoutSeconds,
+			overwrite,
+		)
+		if !innerSkipped {
+			skipped = false
 		}
+		checkError(err)
+	}
 
-		if needDownloadPDF {
-			checkError(err)
-			err = pdf.PrintArticlePageToPDF(ctx,
-				article.AID,
-				projectDir,
-				article.Title,
-				geektimeClient.Cookies,
-				downloadComments,
-				waitSeconds,
-			)
-			if err != nil {
-				sp.Stop()
-				checkError(err)
-			}
+	if needDownloadMD {
+		innerSkipped, err := markdown.Download(ctx,
+			articleInfo.Data.ArticleContent,
+			article.Title,
+			projectDir,
+			article.AID,
+			overwrite)
+		if !innerSkipped {
+			skipped = false
 		}
+		checkError(err)
+	}
 
-		if needDownloadMD {
-			err = markdown.Download(ctx,
-				articleInfo.Data.ArticleContent,
-				article.Title,
-				projectDir,
-				article.AID)
+	if needDownloadAudio {
+		innerSkipped, err := audio.DownloadAudio(ctx, articleInfo.Data.AudioDownloadURL, projectDir, article.Title, overwrite)
+		if !innerSkipped {
+			skipped = false
 		}
+		checkError(err)
+	}
+	return skipped
+}
 
-		if needDownloadAudio {
-			err = audio.DownloadAudio(ctx, articleInfo.Data.AudioDownloadURL, projectDir, article.Title)
-		}
+func downloadVideoArticle(ctx context.Context, article geektime.Article, projectDir string, overwrite bool) bool {
+	dir := projectDir
+	var err error
+	// add sub dir
+	if article.SectionTitle != "" {
+		dir, err = mkDownloadProjectSectionDir(projectDir, article.SectionTitle)
+		checkError(err)
+	}
 
-		sp.Stop()
+	fileName := filenamify.Filenamify(article.Title) + video.TSExtension
+	fullPath := filepath.Join(dir, fileName)
+	if files.CheckFileExists(fullPath) && !overwrite {
+		return true
+	}
+
+	if isUniversity() {
+		err = video.DownloadUniversityVideo(ctx, geektimeClient, article.AID, selectedProduct, dir, quality, concurrency)
+		checkError(err)
+	} else if isEnterprise {
+		err = video.DownloadEnterpriseArticleVideo(ctx, geektimeClient, article.AID, dir, quality, concurrency)
 		checkError(err)
 	} else {
-		if isUniversity() {
-			err := video.DownloadUniversityVideo(ctx, universityClient, article.AID, selectedProduct, projectDir, quality, concurrency)
-			checkError(err)
-		} else {
-			err := video.DownloadArticleVideo(ctx, geektimeClient, article.AID, selectedProductType.SourceType, projectDir, quality, concurrency)
-			checkError(err)
-		}
+		err = video.DownloadArticleVideo(ctx, geektimeClient, article.AID, selectedProductType.SourceType, dir, quality, concurrency)
+		checkError(err)
 	}
+	return false
 }
 
 func isText() bool {
@@ -527,13 +484,7 @@ func isText() bool {
 }
 
 func isUniversity() bool {
-	return selectedProductType.Index == 4
-}
-
-// Sets the bit at pos in the integer n.
-func setBit(n int, pos uint) int {
-	n |= (1 << pos)
-	return n
+	return selectedProductType.Index == 4 && !isEnterprise
 }
 
 func readCookiesFromInput() []*http.Cookie {
@@ -556,27 +507,21 @@ func readCookiesFromInput() []*http.Cookie {
 	return cookies
 }
 
-func findDownloadedArticleFileNames(projectDir string) (map[string]struct{}, error) {
-	files, err := ioutil.ReadDir(projectDir)
-	res := make(map[string]struct{}, len(files))
-	if err != nil {
-		return res, err
-	}
-	if len(files) == 0 {
-		return res, nil
-	}
-	for _, f := range files {
-		res[f.Name()] = struct{}{}
-	}
-	return res, nil
-}
-
 func mkDownloadProjectDir(downloadFolder, phone, gcid, projectName string) (string, error) {
 	userName := phone
 	if gcid != "" {
 		userName = gcid
 	}
 	path := filepath.Join(downloadFolder, userName, filenamify.Filenamify(projectName))
+	err := os.MkdirAll(path, os.ModePerm)
+	if err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func mkDownloadProjectSectionDir(downloadFolder, sectionName string) (string, error) {
+	path := filepath.Join(downloadFolder, filenamify.Filenamify(sectionName))
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
 		return "", err
@@ -633,8 +578,8 @@ func getVideoURLFromArticleContent(content string) (hasVideo bool, videoURL stri
 
 // waitRandomTime wait interval seconds of time plus a 2000ms max jitter
 func waitRandomTime() {
-	r := interval*1000 + rand.Intn(2000)
-	time.Sleep(time.Duration(r) * time.Millisecond)
+	randomMillis := interval*1000 + waitRand.Intn(2000)
+	time.Sleep(time.Duration(randomMillis) * time.Millisecond)
 }
 
 // Execute ...
