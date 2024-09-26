@@ -50,7 +50,10 @@ See [release page](https://github.com/nicoxiang/geektime-downloader/releases)
 ## Windows 推荐使用 Windows Terminal 打开
 
 ## 账号密码方式登录（常用）
-> geektime-downloader.exe -u "phone number"
+## 极客时间已启用阿里验证码，目前只有cookie方式登录可用
+## 如继续使用账号密码登录会提示 “密码输入错误次数过多，已触发验证码校验，请稍后再试”
+## > geektime-downloader.exe -u "phone number"
+
 ## cookie 方式登录
 > geektime-downloader.exe --gcid "gcid" --gcess "gcess"
 ```
@@ -59,6 +62,7 @@ See [release page](https://github.com/nicoxiang/geektime-downloader/releases)
 
 ```bash
 ## Windows 为例
+
 > geektime-downloader.exe -h
 
 Geektime-downloader is used to download geek time lessons
