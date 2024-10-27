@@ -43,7 +43,12 @@ func (f *customFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 
 func init() {
 	userConfigDir, _ := os.UserConfigDir()
-	logFilePath := filepath.Join(userConfigDir, GeektimeLogFolder, GeektimeLogFolder+".log")
+	logDir := filepath.Join(userConfigDir, GeektimeLogFolder)
+    logFilePath := filepath.Join(logDir, GeektimeLogFolder+".log")
+
+    if err := os.MkdirAll(logDir, 0755); err != nil {
+        logger.Fatalf("Failed to create log directory: %v", err)
+    }
 
 	logger.SetReportCaller(true)
 	logger.SetLevel(logrus.InfoLevel)
