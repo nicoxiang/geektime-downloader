@@ -1,13 +1,14 @@
 module github.com/nicoxiang/geektime-downloader
 
 go 1.22
+toolchain go1.23.2
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.5.0
 	github.com/briandowns/spinner v1.23.0
 	github.com/cheggaaa/pb/v3 v3.1.5
-	github.com/chromedp/cdproto v0.0.0-20241003230502-a4a8f7c660df
-	github.com/chromedp/chromedp v0.11.0
+	github.com/chromedp/cdproto v0.0.0-20241022234722-4d5d5faf59fb
+	github.com/chromedp/chromedp v0.11.1
 	github.com/chzyer/readline v1.5.1
 	github.com/go-resty/resty/v2 v2.15.3
 	github.com/google/uuid v1.6.0
@@ -19,7 +20,7 @@ require (
 	github.com/PuerkitoBio/goquery v1.8.1 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
 	github.com/andybalholm/cascadia v1.3.1 // indirect
-	github.com/chromedp/sysutil v1.0.0 // indirect
+	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/gobwas/httphead v0.1.0 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
