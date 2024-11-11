@@ -9,7 +9,7 @@ require (
 	github.com/chromedp/cdproto v0.0.0-20241003230502-a4a8f7c660df
 	github.com/chromedp/chromedp v0.11.0
 	github.com/chzyer/readline v1.5.1
-	github.com/go-resty/resty/v2 v2.15.3
+	github.com/go-resty/resty/v2 v2.16.0
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.8.0
 	golang.org/x/net v0.27.0
