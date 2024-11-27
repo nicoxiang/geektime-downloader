@@ -69,6 +69,8 @@ func init() {
 	defaultDownloadFolder := filepath.Join(userHomeDir, config.GeektimeDownloaderFolder)
 
 	rootCmd.Flags().StringVarP(&phone, "phone", "u", "", "你的极客时间账号(手机号)")
+	rootCmd.Flags().MarkDeprecated("phone", "This flag is deprecated and will be removed in future versions. Please use '--gcid' and '--gcess' instead.")
+	rootCmd.Flags().MarkHidden("phone")
 	rootCmd.Flags().StringVar(&gcid, "gcid", "", "极客时间 cookie 值 gcid")
 	rootCmd.Flags().StringVar(&gcess, "gcess", "", "极客时间 cookie 值 gcess")
 	rootCmd.Flags().StringVarP(&downloadFolder, "folder", "f", defaultDownloadFolder, "专栏和视频课的下载目标位置")
