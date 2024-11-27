@@ -92,8 +92,8 @@ func findAllImages(md string) (images []string) {
 	for _, matches := range imgRegexp.FindAllStringSubmatch(md, -1) {
 		if len(matches) == 3 {
 			s := matches[2]
-			_, err := url.ParseRequestURI(s)
-			if err == nil {
+			isImg, err := isImageURL(s)
+			if err == nil && isImg {
 				images = append(images, s)
 			}
 			// sometime exists broken image url, just ignore
@@ -137,4 +137,25 @@ func writeImageFile(ctx context.Context,
 		ms.ReplaceAll(imageURL, filepath.ToSlash(rel))
 	}
 	return nil
+}
+
+func isImageURL(urlStr string) (bool, error) {
+	// 解析 URL
+	parsedURL, err := url.ParseRequestURI(urlStr)
+	if err != nil {
+		return false, err
+	}
+	// 提取路径部分
+	filePath := parsedURL.Path
+
+	// 获取文件扩展名并转换为小写
+	ext := strings.ToLower(path.Ext(filePath))
+
+	// 检查扩展名是否属于图片类型
+	switch ext {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff":
+		return true, nil
+	default:
+		return false, nil
+	}
 }
