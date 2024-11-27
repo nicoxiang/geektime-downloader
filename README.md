@@ -49,11 +49,6 @@ See [release page](https://github.com/nicoxiang/geektime-downloader/releases)
 ## Windows 为例
 ## Windows 推荐使用 Windows Terminal 打开
 
-## 账号密码方式登录（常用）
-## 极客时间已启用阿里验证码，目前只有cookie方式登录可用
-## 如继续使用账号密码登录会提示 “密码输入错误次数过多，已触发验证码校验，请稍后再试”
-## > geektime-downloader.exe -u "phone number"
-
 ## cookie 方式登录
 > geektime-downloader.exe --gcid "gcid" --gcess "gcess"
 ```
@@ -79,7 +74,6 @@ Flags:
   -h, --help                    help for geektime-downloader
       --interval int            下载资源的间隔时间, 单位为秒, 默认1秒 (default 1)
       --output int              专栏的输出内容(1pdf,2markdown,4audio)可自由组合 (default 1)
-  -u, --phone string            你的极客时间账号(手机号)
       --print-pdf-timeout int   Chrome生成PDF的超时时间, 单位为秒, 默认60秒 (default 60)
       --print-pdf-wait int      Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒 (default 8)
   -q, --quality string          下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
