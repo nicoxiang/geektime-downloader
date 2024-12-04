@@ -356,18 +356,14 @@ func handleDownloadAll(ctx context.Context) {
 		var i int
 
 		for _, article := range selectedProduct.Articles {
-			skipped := downloadTextArticle(ctx, article, projectDir, false)
+			downloadTextArticle(ctx, article, projectDir, false)
 			increaseDownloadedTextArticleCount(total, &i)
-			if !skipped {
-				waitRandomTime()
-			}
+			waitRandomTime()
 		}
 	} else {
 		for _, article := range selectedProduct.Articles {
-			skipped := downloadVideoArticle(ctx, article, projectDir, false)
-			if !skipped {
-				waitRandomTime()
-			}
+			downloadVideoArticle(ctx, article, projectDir, false)
+			waitRandomTime()
 		}
 	}
 	selectProductType(ctx)
