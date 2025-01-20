@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.5.0
-	github.com/briandowns/spinner v1.23.0
+	github.com/briandowns/spinner v1.23.2
 	github.com/cheggaaa/pb/v3 v3.1.5
 	github.com/chromedp/cdproto v0.0.0-20241003230502-a4a8f7c660df
 	github.com/chromedp/chromedp v0.11.0
