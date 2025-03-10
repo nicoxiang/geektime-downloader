@@ -1,6 +1,7 @@
 module github.com/nicoxiang/geektime-downloader
 
 go 1.22
+toolchain go1.23.7
 
 require (
 	github.com/JohannesKaufmann/html-to-markdown v1.5.0
@@ -40,5 +41,5 @@ require (
 	github.com/manifoldco/promptui v0.9.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/sync v0.10.0
+	golang.org/x/sync v0.12.0
 )
