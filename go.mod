@@ -12,7 +12,7 @@ require (
 	github.com/go-resty/resty/v2 v2.16.2
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.8.0
-	golang.org/x/net v0.31.0
+	golang.org/x/net v0.33.0
 )
 
 require (
@@ -31,8 +31,8 @@ require (
 	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/stretchr/testify v1.7.1 // indirect
-	golang.org/x/sys v0.27.0 // indirect
-	golang.org/x/term v0.26.0 // indirect
+	golang.org/x/sys v0.28.0 // indirect
+	golang.org/x/term v0.27.0 // indirect
 )
 
 require (
@@ -40,5 +40,5 @@ require (
 	github.com/manifoldco/promptui v0.9.0
 	github.com/sirupsen/logrus v1.9.3
 	github.com/spf13/pflag v1.0.5 // indirect
-	golang.org/x/sync v0.9.0
+	golang.org/x/sync v0.10.0
 )
