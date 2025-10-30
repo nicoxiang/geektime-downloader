@@ -8,7 +8,6 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/downloader"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/files"
 )
 
 const (
@@ -17,27 +16,21 @@ const (
 )
 
 // DownloadAudio ...
-func DownloadAudio(ctx context.Context, downloadAudioURL, dir, title string, overwrite bool) (bool, error) {
+func DownloadAudio(ctx context.Context, downloadAudioURL, dir, title string) error {
 	if downloadAudioURL == "" {
-		return false, nil
+		return nil
 	}
-	filenamifyTitle := filenamify.Filenamify(title)
-
-	dst := filepath.Join(dir, filenamifyTitle+MP3Extension)
-
-	if files.CheckFileExists(dst) && !overwrite {
-		return true, nil
-	}
+	audioFileName := filepath.Join(dir, filenamify.Filenamify(title)+MP3Extension)
 
 	headers := make(map[string]string, 2)
 	headers[geektime.Origin] = geektime.DefaultBaseURL
 	headers[geektime.UserAgent] = geektime.DefaultUserAgent
 
-	_, err := downloader.DownloadFileConcurrently(ctx, dst, downloadAudioURL, headers, 1)
+	_, err := downloader.DownloadFileConcurrently(ctx, audioFileName, downloadAudioURL, headers, 1)
 
 	if err != nil {
-		_ = os.Remove(dst)
+		_ = os.Remove(audioFileName)
 	}
 
-	return false, err
+	return err
 }

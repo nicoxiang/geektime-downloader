@@ -50,6 +50,12 @@ var (
 	waitRand               = rand.New(rand.NewSource(time.Now().UnixNano()))
 )
 
+const (
+	OutputPDF   = 1 << 0 // 1
+	OutputMD    = 1 << 1 // 2
+	OutputAudio = 1 << 2 // 4
+)
+
 type productTypeSelectOption struct {
 	Index              int
 	Text               string
@@ -390,10 +396,14 @@ func downloadArticle(ctx context.Context, article geektime.Article, projectDir s
 }
 
 func downloadTextArticle(ctx context.Context, article geektime.Article, projectDir string, overwrite bool) bool {
-	needDownloadPDF := columnOutputType&1 == 1
-	needDownloadMD := (columnOutputType>>1)&1 == 1
-	needDownloadAudio := (columnOutputType>>2)&1 == 1
-	skipped := true
+	needDownloadPDF := columnOutputType&OutputPDF != 0
+	needDownloadMD := columnOutputType&OutputMD != 0
+	needDownloadAudio := columnOutputType&OutputAudio != 0
+	skipped := skipDownloadAllFiles(projectDir, article, needDownloadPDF, needDownloadMD, needDownloadAudio, overwrite)
+
+	if skipped {
+		return true
+	}
 
 	articleInfo, err := geektimeClient.V1ArticleInfo(article.AID)
 	checkError(err)
@@ -414,7 +424,7 @@ func downloadTextArticle(ctx context.Context, article geektime.Article, projectD
 	}
 
 	if needDownloadPDF {
-		innerSkipped, err := pdf.PrintArticlePageToPDF(ctx,
+		err := pdf.PrintArticlePageToPDF(ctx,
 			article.AID,
 			projectDir,
 			article.Title,
@@ -422,35 +432,61 @@ func downloadTextArticle(ctx context.Context, article geektime.Article, projectD
 			downloadComments,
 			printPDFWaitSeconds,
 			printPDFTimeoutSeconds,
-			overwrite,
 		)
-		if !innerSkipped {
-			skipped = false
-		}
 		checkError(err)
 	}
 
 	if needDownloadMD {
-		innerSkipped, err := markdown.Download(ctx,
+		err := markdown.Download(ctx,
 			articleInfo.Data.ArticleContent,
 			article.Title,
 			projectDir,
 			article.AID,
-			overwrite)
-		if !innerSkipped {
-			skipped = false
-		}
+			)
 		checkError(err)
 	}
 
 	if needDownloadAudio {
-		innerSkipped, err := audio.DownloadAudio(ctx, articleInfo.Data.AudioDownloadURL, projectDir, article.Title, overwrite)
-		if !innerSkipped {
-			skipped = false
-		}
+		err := audio.DownloadAudio(ctx, articleInfo.Data.AudioDownloadURL, projectDir, article.Title)
 		checkError(err)
 	}
-	return skipped
+	return false
+}
+
+func skipDownloadAllFiles(projectDir string, article geektime.Article, needDownloadPDF, needDownloadMD, needDownloadAudio, overwrite bool) bool {
+	pdfFileName := filepath.Join(projectDir, filenamify.Filenamify(article.Title)+pdf.PDFExtension)
+	markdownFileName := filepath.Join(projectDir, filenamify.Filenamify(article.Title)+markdown.MDExtension)
+	audioFileName := filepath.Join(projectDir, filenamify.Filenamify(article.Title)+audio.MP3Extension)
+	// If no output type is selected, do not skip
+    if !needDownloadPDF && !needDownloadMD && !needDownloadAudio {
+        return false
+    }
+
+    // Check only the files that are requested.
+    // If any requested file does not exist, do not skip.
+    if needDownloadPDF {
+        if !files.CheckFileExists(pdfFileName) {
+            return false
+        }
+    }
+    if needDownloadMD {
+        if !files.CheckFileExists(markdownFileName) {
+            return false
+        }
+    }
+    if needDownloadAudio {
+        if !files.CheckFileExists(audioFileName) {
+            return false
+        }
+    }
+
+    // All requested files exist. If overwrite is false, skip downloading.
+    if !overwrite {
+        return true
+    }
+
+    // Overwrite requested -> do not skip.
+    return false
 }
 
 func downloadVideoArticle(ctx context.Context, article geektime.Article, projectDir string, overwrite bool) bool {

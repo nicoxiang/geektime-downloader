@@ -18,7 +18,6 @@ import (
 	"github.com/chromedp/chromedp/device"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/files"
 )
 
 // PDFExtension ...
@@ -33,15 +32,10 @@ func PrintArticlePageToPDF(ctx context.Context,
 	downloadComments bool,
 	printPDFWaitSeconds int,
 	printPDFTimeoutSeconds int,
-	overwrite bool,
-) (bool, error) {
+) error {
 	rateLimit := false
 
-	fileName := filepath.Join(dir, filenamify.Filenamify(title)+PDFExtension)
-
-	if files.CheckFileExists(fileName) && !overwrite {
-		return true, nil
-	}
+	pdfFileName := filepath.Join(dir, filenamify.Filenamify(title)+PDFExtension)
 
 	// new tab
 	ctx, cancel := chromedp.NewContext(ctx)
@@ -68,18 +62,18 @@ func PrintArticlePageToPDF(ctx context.Context,
 			chromedp.Navigate(geektime.DefaultBaseURL + `/column/article/` + strconv.Itoa(aid)),
 			chromedp.Sleep(time.Duration(printPDFWaitSeconds) * time.Second),
 			hideRedundantElements(downloadComments),
-			printToPDF(fileName),
+			printToPDF(pdfFileName),
 		},
 	)
 
 	if err != nil {
 		if rateLimit {
-			return false, geektime.ErrGeekTimeRateLimit
+			return geektime.ErrGeekTimeRateLimit
 		}
-		return false, err
+		return err
 	}
 
-	return false, nil
+	return nil
 }
 
 func setCookies(cookies []*http.Cookie) chromedp.ActionFunc {
