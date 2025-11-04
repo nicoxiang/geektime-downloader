@@ -1,16 +1,15 @@
-# options for analysis running
+# .golangci.yml
+version: "2"
 run:
-  skip-dirs:
-    - .*~
-  skip-files:
-    - ".*\\.my\\.go$"
-    - _test.go
+  timeout: 5m            # 最大运行时间
+  tests: true            # 检查测试文件
 
 linters:
-  disable-all: true
-  enable:
-    - gosimple
-    - staticcheck
-    - stylecheck
-    - unused
-  fast: false
+  default: standard
+  settings:
+    staticcheck:
+      checks: ["all", "-ST1000"]
+
+issues:
+  max-issues-per-linter: 0   # 每个 linter 不限制报错数量
+  max-same-issues: 0         # 同类型问题不限制

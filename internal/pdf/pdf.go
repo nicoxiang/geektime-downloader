@@ -3,7 +3,6 @@ package pdf
 import (
 	"bufio"
 	"context"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -65,7 +64,6 @@ func PrintArticlePageToPDF(ctx context.Context,
 			printToPDF(pdfFileName),
 		},
 	)
-
 	if err != nil {
 		if rateLimit {
 			return geektime.ErrGeekTimeRateLimit
@@ -92,8 +90,7 @@ func setCookies(cookies []*http.Cookie) chromedp.ActionFunc {
 
 func hideRedundantElements(downloadComments bool) chromedp.ActionFunc {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
-		s :=
-			`
+		s := `
 			var headMain = document.getElementsByClassName('main')[0];
    			if(headMain){
       				headMain.style.display="none";
@@ -148,8 +145,7 @@ func hideRedundantElements(downloadComments bool) chromedp.ActionFunc {
 			}
 		`
 
-		hideCommentsExpression :=
-			`
+		hideCommentsExpression := `
 			var comments = document.querySelector('div[class^="Index_articleComments"]')
 			if(comments){
 				comments.style.display="none"
@@ -207,7 +203,6 @@ func printToPDF(fileName string) chromedp.ActionFunc {
 
 		_, err = buffer.WriteTo(file)
 		if err != nil {
-			logger.Error(err, "write result to output path")
 			return err
 		}
 

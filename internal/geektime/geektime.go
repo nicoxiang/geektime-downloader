@@ -207,3 +207,7 @@ func (c *Client) columnArticles(cid int) ([]Article, error) {
 	}
 	return articles, nil
 }
+
+func IsTextCourse(course Course) bool {
+	return !course.IsVideo
+}

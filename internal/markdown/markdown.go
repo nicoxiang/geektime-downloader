@@ -38,7 +38,7 @@ func (ms *markdownString) ReplaceAll(o, n string) {
 }
 
 // Download article as markdown
-func Download(ctx context.Context, html, title, dir string, aid int)  error {
+func Download(ctx context.Context, html, title, dir string, aid int) error {
 	select {
 	case <-ctx.Done():
 		return context.Canceled
@@ -53,18 +53,20 @@ func Download(ctx context.Context, html, title, dir string, aid int)  error {
 		return err
 	}
 	// step2: download images
-	var ss = &markdownString{s: markdown}
+	ss := &markdownString{s: markdown}
 	imageURLs := findAllImages(markdown)
 
 	// images/aid/imageName.png
 	imagesFolder := filepath.Join(dir, "images", strconv.Itoa(aid))
 
 	if _, err := os.Stat(imagesFolder); errors.Is(err, os.ErrNotExist) {
-		os.MkdirAll(imagesFolder, os.ModePerm)
+		err = os.MkdirAll(imagesFolder, os.ModePerm)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = writeImageFile(ctx, imageURLs, dir, imagesFolder, ss)
-
 	if err != nil {
 		return err
 	}
@@ -124,7 +126,6 @@ func writeImageFile(ctx context.Context,
 		headers[geektime.UserAgent] = geektime.DefaultUserAgent
 
 		_, err := downloader.DownloadFileConcurrently(ctx, imageLocalFullPath, imageURL, headers, 1)
-
 		if err != nil {
 			return err
 		}

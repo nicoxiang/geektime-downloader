@@ -8,10 +8,8 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 )
 
-var (
-	// regex pattern for extracting `key=value` parameters from a line
-	linePattern = regexp.MustCompile(`([a-zA-Z-]+)=("[^"]+"|[^",]+)`)
-)
+// regex pattern for extracting `key=value` parameters from a line
+var linePattern = regexp.MustCompile(`([a-zA-Z-]+)=("[^"]+"|[^",]+)`)
 
 // Parse do m3u8 url GET request, and extract ts file names and check if it's encrypt video
 func Parse(client *geektime.Client, m3u8url string) (tsFileNames []string, isVodEncryptVideo bool, err error) {
@@ -19,7 +17,9 @@ func Parse(client *geektime.Client, m3u8url string) (tsFileNames []string, isVod
 	if err != nil {
 		return nil, false, err
 	}
-	defer m3u8Resp.RawBody().Close()
+	defer func() {
+		_ = m3u8Resp.RawBody().Close()
+	}()
 	s := bufio.NewScanner(m3u8Resp.RawBody())
 	var lines []string
 	for s.Scan() {

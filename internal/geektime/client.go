@@ -69,7 +69,8 @@ func (c *Client) newRequest(
 	path string,
 	params map[string]string,
 	body interface{},
-	result interface{}) *resty.Request {
+	result interface{},
+) *resty.Request {
 	r := c.RestyClient.R()
 	r.Method = method
 	r.URL = baseURL + path
@@ -92,7 +93,6 @@ func do(request *resty.Request) (*resty.Response, error) {
 		request.Body,
 	)
 	resp, err := request.Execute(request.Method, request.URL)
-
 	if err != nil {
 		return nil, err
 	}
@@ -107,9 +107,10 @@ func do(request *resty.Request) (*resty.Response, error) {
 
 	if statusCode != 200 {
 		logNotOkResponse(resp)
-		if statusCode == 451 {
+		switch statusCode {
+		case 451:
 			return nil, ErrGeekTimeRateLimit
-		} else if statusCode == 452 {
+		case 452:
 			return nil, ErrAuthFailed
 		}
 	}
@@ -123,7 +124,7 @@ func do(request *resty.Request) (*resty.Response, error) {
 	}
 
 	logNotOkResponse(resp)
-	//未登录或者已失效
+	// 未登录或者已失效
 	if code == -3050 || code == -2000 {
 		return nil, ErrAuthFailed
 	}

@@ -29,14 +29,18 @@ func (f *customFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	// Get the script name from the full file path
 	fullPathName := filepath.Base(filename)
 
-	// Format the log message
-	message := fmt.Sprintf("[%s] [%s] [%s:%d] %s\n",
-		entry.Time.Format("2006-01-02 15:04:05"), // Date-time
-		entry.Level.String(),                     // Log level
-		fullPathName,                             // Full path name
-		line,                                     // Line number
-		entry.Message,                            // Log message
-	)
+	msg := entry.Message
+    if errVal, ok := entry.Data["error"]; ok && errVal != nil {
+        msg = fmt.Sprintf("%s | error: %v", msg, errVal)
+    }
+
+    message := fmt.Sprintf("[%s] [%s] [%s:%d] %s\n",
+        entry.Time.Format("2006-01-02 15:04:05"),
+        entry.Level.String(),
+        fullPathName,
+        line,
+        msg,
+    )
 
 	return []byte(message), nil
 }
@@ -73,10 +77,11 @@ func Warnf(format string, args ...interface{}) {
 }
 
 // Error wrapper logrus log.Error
-func Error(err error, args ...interface{}) {
-	if err != nil {
-		logger.WithError(err).Error(args...)
-	} else {
-		logger.Error(args...)
-	}
+func Error(err error, format string, args ...interface{}) {
+    msg := fmt.Sprintf(format, args...)
+    if err != nil {
+        logger.WithError(err).Error(msg)
+    } else {
+        logger.Error(msg)
+    }
 }
