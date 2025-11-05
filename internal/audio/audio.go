@@ -8,6 +8,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/downloader"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 const (
@@ -17,6 +18,7 @@ const (
 
 // DownloadAudio ...
 func DownloadAudio(ctx context.Context, downloadAudioURL, dir, title string) error {
+	logger.Infof("Begin download article audio, title: %s", title)
 	if downloadAudioURL == "" {
 		return nil
 	}
@@ -27,10 +29,10 @@ func DownloadAudio(ctx context.Context, downloadAudioURL, dir, title string) err
 	headers[geektime.UserAgent] = geektime.DefaultUserAgent
 
 	_, err := downloader.DownloadFileConcurrently(ctx, audioFileName, downloadAudioURL, headers, 1)
-
 	if err != nil {
+		logger.Errorf(err, "Failed to download article audio, title: %s", title)
 		_ = os.Remove(audioFileName)
 	}
-
+	logger.Infof("Finish download article audio, title: %s", title)
 	return err
 }

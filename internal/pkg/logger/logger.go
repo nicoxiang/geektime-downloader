@@ -14,12 +14,9 @@ const (
 	GeektimeLogFolder = "geektime-downloader"
 )
 
-var (
-	logger = logrus.New()
-)
+var logger = logrus.New()
 
-type customFormatter struct {
-}
+type customFormatter struct{}
 
 // Format custom logrus log format
 func (f *customFormatter) Format(entry *logrus.Entry) ([]byte, error) {
@@ -30,17 +27,17 @@ func (f *customFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	fullPathName := filepath.Base(filename)
 
 	msg := entry.Message
-    if errVal, ok := entry.Data["error"]; ok && errVal != nil {
-        msg = fmt.Sprintf("%s | error: %v", msg, errVal)
-    }
+	if errVal, ok := entry.Data["error"]; ok && errVal != nil {
+		msg = fmt.Sprintf("%s | error: %v", msg, errVal)
+	}
 
-    message := fmt.Sprintf("[%s] [%s] [%s:%d] %s\n",
-        entry.Time.Format("2006-01-02 15:04:05"),
-        entry.Level.String(),
-        fullPathName,
-        line,
-        msg,
-    )
+	message := fmt.Sprintf("[%s] [%s] [%s:%d] %s\n",
+		entry.Time.Format("2006-01-02 15:04:05"),
+		entry.Level.String(),
+		fullPathName,
+		line,
+		msg,
+	)
 
 	return []byte(message), nil
 }
@@ -48,16 +45,16 @@ func (f *customFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 func init() {
 	userConfigDir, _ := os.UserConfigDir()
 	logDir := filepath.Join(userConfigDir, GeektimeLogFolder)
-    logFilePath := filepath.Join(logDir, GeektimeLogFolder+".log")
+	logFilePath := filepath.Join(logDir, GeektimeLogFolder+".log")
 
-    if err := os.MkdirAll(logDir, 0755); err != nil {
-        logger.Fatalf("Failed to create log directory: %v", err)
-    }
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		logger.Fatalf("Failed to create log directory: %v", err)
+	}
 
 	logger.SetReportCaller(true)
 	logger.SetLevel(logrus.InfoLevel)
 	logger.SetFormatter(&customFormatter{})
-	logFile, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0666)
+	logFile, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
 	if err == nil {
 		logger.Out = logFile
 	} else {
@@ -76,12 +73,12 @@ func Warnf(format string, args ...interface{}) {
 	logger.Logf(logrus.WarnLevel, format, args...)
 }
 
-// Error wrapper logrus log.Error
-func Error(err error, format string, args ...interface{}) {
-    msg := fmt.Sprintf(format, args...)
-    if err != nil {
-        logger.WithError(err).Error(msg)
-    } else {
-        logger.Error(msg)
-    }
+// Errorf wrapper logrus log.Errorf
+func Errorf(err error, format string, args ...interface{}) {
+	msg := fmt.Sprintf(format, args...)
+	if err != nil {
+		logger.WithError(err).Error(msg)
+	} else {
+		logger.Error(msg)
+	}
 }

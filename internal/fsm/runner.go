@@ -1,4 +1,4 @@
-package fsm 
+package fsm
 
 import (
 	"context"
@@ -14,6 +14,8 @@ import (
 
 	"github.com/briandowns/spinner"
 	"github.com/manifoldco/promptui"
+	"golang.org/x/net/html"
+
 	"github.com/nicoxiang/geektime-downloader/internal/audio"
 	"github.com/nicoxiang/geektime-downloader/internal/config"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
@@ -24,7 +26,6 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 	"github.com/nicoxiang/geektime-downloader/internal/ui"
 	"github.com/nicoxiang/geektime-downloader/internal/video"
-	"golang.org/x/net/html"
 )
 
 type FSMRunner struct {
@@ -107,7 +108,6 @@ func (r *FSMRunner) Run() error {
 				err = r.handleSelectArticle(index)
 			}
 		case StateExit:
-			// 统一 return，不要直接 os.Exit
 			return nil
 		}
 
@@ -116,13 +116,12 @@ func (r *FSMRunner) Run() error {
 			case errors.Is(err, context.Canceled), errors.Is(err, promptui.ErrInterrupt):
 				fmt.Println("\n用户中断操作")
 			case os.IsTimeout(err):
+				logger.Errorf(err, "Request timed out")
 				fmt.Fprintln(os.Stderr, "\n请求超时")
 			default:
-				logger.Error(err, "An error occurred")
+				logger.Errorf(err, "An error occurred")
 				fmt.Fprintf(os.Stderr, "\nAn error occurred: %v\n", err)
 			}
-
-			// 一旦发生错误或中断，立即退出 FSM
 			return err
 		}
 	}
@@ -190,7 +189,7 @@ func (r *FSMRunner) handleInputProductIDIfDownloadDirectly(productID int) error 
 	}
 
 	if r.validateProductCode(productInfo.Data.Info.Type) {
-		projectDir, err := r.mkDownloadProjectDir(productInfo.Data.Info.Title)
+		columnDir, err := r.mkDownloadColumnDir(productInfo.Data.Info.Title)
 		if err != nil {
 			return err
 		}
@@ -199,7 +198,7 @@ func (r *FSMRunner) handleInputProductIDIfDownloadDirectly(productID int) error 
 			r.geektimeClient,
 			productInfo.Data.Info.Article.ID,
 			r.selectedProductType.SourceType,
-			projectDir,
+			columnDir,
 			r.config.Quality,
 			r.concurrency)
 		if err != nil {
@@ -210,6 +209,8 @@ func (r *FSMRunner) handleInputProductIDIfDownloadDirectly(productID int) error 
 	return nil
 }
 
+// validateProductCode checks if the product code field in the response body returned by the API
+// exists in the selected product's accepted product types list.
 func (r *FSMRunner) validateProductCode(productCode string) bool {
 	for _, pt := range r.selectedProductType.AcceptProductTypes {
 		if pt == productCode {
@@ -227,11 +228,11 @@ func (r *FSMRunner) handleSelectArticle(index int) error {
 	}
 	a := r.selectedProduct.Articles[index-1]
 
-	projectDir, err := r.mkDownloadProjectDir(r.selectedProduct.Title)
+	columnDir, err := r.mkDownloadColumnDir(r.selectedProduct.Title)
 	if err != nil {
 		return err
 	}
-	err = r.downloadArticle(a, projectDir)
+	err = r.downloadArticle(a, columnDir)
 	if err != nil {
 		return err
 	}
@@ -241,8 +242,10 @@ func (r *FSMRunner) handleSelectArticle(index int) error {
 	return nil
 }
 
+// handleDownloadAll manages the bulk download process for all articles in a selected product (course).
+// Returns an error if any step in the download process fails.
 func (r *FSMRunner) handleDownloadAll() error {
-	projectDir, err := r.mkDownloadProjectDir(r.selectedProduct.Title)
+	columnDir, err := r.mkDownloadColumnDir(r.selectedProduct.Title)
 	if err != nil {
 		return err
 	}
@@ -252,10 +255,10 @@ func (r *FSMRunner) handleDownloadAll() error {
 		var i int
 
 		for _, article := range r.selectedProduct.Articles {
-			skip := r.skipDownloadTextArticle(article, projectDir, false)
+			skip := r.skipDownloadTextArticle(article, columnDir, false)
 			if !skip {
 				logger.Infof("开始下载文章：《%s》", article.Title)
-				err = r.downloadTextArticle(article, projectDir, false)
+				err = r.downloadTextArticle(article, columnDir, false)
 				if err != nil {
 					return err
 				}
@@ -265,9 +268,9 @@ func (r *FSMRunner) handleDownloadAll() error {
 		}
 	} else {
 		for _, article := range r.selectedProduct.Articles {
-			skip := r.skipDownloadVideoArticle(article, projectDir, false)
+			skip := r.skipDownloadVideoArticle(article, columnDir, false)
 			if !skip {
-				err = r.downloadVideoArticle(article, projectDir)
+				err = r.downloadVideoArticle(article, columnDir)
 				if err != nil {
 					return err
 				}
@@ -284,20 +287,22 @@ func increaseDownloadedTextArticleCount(total int, i *int) {
 	fmt.Printf("\r已完成下载%d/%d", *i, total)
 }
 
-func (r *FSMRunner) downloadArticle(article geektime.Article, projectDir string) error {
+// downloadArticle processes the download of a single article from Geektime.
+// It handles both text-based courses and video content differently.
+func (r *FSMRunner) downloadArticle(article geektime.Article, columnDir string) error {
 	var err error
 	if geektime.IsTextCourse(r.selectedProduct) {
 		r.sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》... ]", article.Title)
 		r.sp.Start()
 		defer r.sp.Stop()
-		skip := r.skipDownloadTextArticle(article, projectDir, true)
+		skip := r.skipDownloadTextArticle(article, columnDir, true)
 		if !skip {
-			err = r.downloadTextArticle(article, projectDir, true)
+			err = r.downloadTextArticle(article, columnDir, true)
 		}
 	} else {
-		skip := r.skipDownloadVideoArticle(article, projectDir, true)
+		skip := r.skipDownloadVideoArticle(article, columnDir, true)
 		if !skip {
-			err = r.downloadVideoArticle(article, projectDir)
+			err = r.downloadVideoArticle(article, columnDir)
 		}
 	}
 	if err != nil {
@@ -306,14 +311,16 @@ func (r *FSMRunner) downloadArticle(article geektime.Article, projectDir string)
 	return nil
 }
 
-func (r *FSMRunner) skipDownloadTextArticle(article geektime.Article, projectDir string, overwrite bool) bool {
+func (r *FSMRunner) skipDownloadTextArticle(article geektime.Article, columnDir string, overwrite bool) bool {
 	needDownloadPDF := r.config.ColumnOutputType&outputPDF != 0
 	needDownloadMD := r.config.ColumnOutputType&outputMD != 0
 	needDownloadAudio := r.config.ColumnOutputType&outputAudio != 0
-	return skipDownloadAllTextArticleFiles(projectDir, article, needDownloadPDF, needDownloadMD, needDownloadAudio, overwrite)
+	return skipDownloadAllTextArticleFiles(columnDir, article, needDownloadPDF, needDownloadMD, needDownloadAudio, overwrite)
 }
 
-func (r *FSMRunner) downloadTextArticle(article geektime.Article, projectDir string, overwrite bool) error {
+// downloadTextArticle downloads the content of a Geektime text article in various formats (PDF, Markdown, Audio, and Video).
+// The function supports overwriting existing files if specified.
+func (r *FSMRunner) downloadTextArticle(article geektime.Article, columnDir string, overwrite bool) error {
 	needDownloadPDF := r.config.ColumnOutputType&outputPDF != 0
 	needDownloadMD := r.config.ColumnOutputType&outputMD != 0
 	needDownloadAudio := r.config.ColumnOutputType&outputAudio != 0
@@ -326,7 +333,7 @@ func (r *FSMRunner) downloadTextArticle(article geektime.Article, projectDir str
 
 	hasVideo, videoURL := getVideoURLFromArticleContent(articleInfo.Data.ArticleContent)
 	if hasVideo && videoURL != "" {
-		err = video.DownloadMP4(r.ctx, article.Title, projectDir, []string{videoURL}, overwrite)
+		err = video.DownloadMP4(r.ctx, article.Title, columnDir, []string{videoURL}, overwrite)
 		if err != nil {
 			return err
 		}
@@ -337,7 +344,7 @@ func (r *FSMRunner) downloadTextArticle(article geektime.Article, projectDir str
 		for i, v := range articleInfo.Data.InlineVideoSubtitles {
 			videoURLs[i] = v.VideoURL
 		}
-		err = video.DownloadMP4(r.ctx, article.Title, projectDir, videoURLs, overwrite)
+		err = video.DownloadMP4(r.ctx, article.Title, columnDir, videoURLs, overwrite)
 		if err != nil {
 			return err
 		}
@@ -346,7 +353,7 @@ func (r *FSMRunner) downloadTextArticle(article geektime.Article, projectDir str
 	if needDownloadPDF {
 		err := pdf.PrintArticlePageToPDF(r.ctx,
 			article.AID,
-			projectDir,
+			columnDir,
 			article.Title,
 			r.geektimeClient.Cookies,
 			r.config.DownloadComments,
@@ -362,7 +369,7 @@ func (r *FSMRunner) downloadTextArticle(article geektime.Article, projectDir str
 		err := markdown.Download(r.ctx,
 			articleInfo.Data.ArticleContent,
 			article.Title,
-			projectDir,
+			columnDir,
 			article.AID,
 		)
 		if err != nil {
@@ -371,7 +378,7 @@ func (r *FSMRunner) downloadTextArticle(article geektime.Article, projectDir str
 	}
 
 	if needDownloadAudio {
-		err := audio.DownloadAudio(r.ctx, articleInfo.Data.AudioDownloadURL, projectDir, article.Title)
+		err := audio.DownloadAudio(r.ctx, articleInfo.Data.AudioDownloadURL, columnDir, article.Title)
 		if err != nil {
 			return err
 		}
@@ -379,10 +386,10 @@ func (r *FSMRunner) downloadTextArticle(article geektime.Article, projectDir str
 	return nil
 }
 
-func skipDownloadAllTextArticleFiles(projectDir string, article geektime.Article, needDownloadPDF, needDownloadMD, needDownloadAudio, overwrite bool) bool {
-	pdfFileName := filepath.Join(projectDir, filenamify.Filenamify(article.Title)+pdf.PDFExtension)
-	markdownFileName := filepath.Join(projectDir, filenamify.Filenamify(article.Title)+markdown.MDExtension)
-	audioFileName := filepath.Join(projectDir, filenamify.Filenamify(article.Title)+audio.MP3Extension)
+func skipDownloadAllTextArticleFiles(columnDir string, article geektime.Article, needDownloadPDF, needDownloadMD, needDownloadAudio, overwrite bool) bool {
+	pdfFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+pdf.PDFExtension)
+	markdownFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+markdown.MDExtension)
+	audioFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+audio.MP3Extension)
 	// If no output type is selected, do not skip
 	if !needDownloadPDF && !needDownloadMD && !needDownloadAudio {
 		return false
@@ -415,8 +422,8 @@ func skipDownloadAllTextArticleFiles(projectDir string, article geektime.Article
 	return false
 }
 
-func (r *FSMRunner) skipDownloadVideoArticle(article geektime.Article, projectDir string, overwrite bool) bool {
-	dir := projectDir
+func (r *FSMRunner) skipDownloadVideoArticle(article geektime.Article, columnDir string, overwrite bool) bool {
+	dir := columnDir
 	fileName := filenamify.Filenamify(article.Title) + video.TSExtension
 	fullPath := filepath.Join(dir, fileName)
 	if files.CheckFileExists(fullPath) && !overwrite {
@@ -425,12 +432,15 @@ func (r *FSMRunner) skipDownloadVideoArticle(article geektime.Article, projectDi
 	return false
 }
 
-func (r *FSMRunner) downloadVideoArticle(article geektime.Article, projectDir string) error {
-	dir := projectDir
+// downloadVideoArticle downloads a video article to the specified column directory.
+// It handles different types of video content including university courses, enterprise content,
+// and regular article videos.
+func (r *FSMRunner) downloadVideoArticle(article geektime.Article, columnDir string) error {
+	dir := columnDir
 	var err error
 	// add sub dir
 	if article.SectionTitle != "" {
-		dir, err = r.mkDownloadProjectSectionDir(projectDir, article.SectionTitle)
+		dir, err = r.mkDownloadProjectSectionDir(columnDir, article.SectionTitle)
 		if err != nil {
 			return err
 		}
@@ -446,8 +456,9 @@ func (r *FSMRunner) downloadVideoArticle(article geektime.Article, projectDir st
 	return err
 }
 
-func (r *FSMRunner) mkDownloadProjectDir(projectName string) (string, error) {
-	path := filepath.Join(r.config.DownloadFolder, r.config.Gcid, filenamify.Filenamify(projectName))
+// mkDownloadColumnDir creates a directory for downloading a column with the given columnName.
+func (r *FSMRunner) mkDownloadColumnDir(columnName string) (string, error) {
+	path := filepath.Join(r.config.DownloadFolder, r.config.Gcid, filenamify.Filenamify(columnName))
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
 		return "", err

@@ -15,8 +15,10 @@ import (
 	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/device"
+
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 // PDFExtension ...
@@ -48,12 +50,14 @@ func PrintArticlePageToPDF(ctx context.Context,
 		case *network.EventResponseReceived:
 			response := responseReceivedEvent.Response
 			if response.URL == geektime.DefaultBaseURL+"/serv/v1/article" && response.Status == 451 {
+				logger.Warnf("Hit GeekTime rate limit when downloading article pdf, articleID: %d, pdfFileName: %s", aid, pdfFileName)
 				rateLimit = true
 				cancel()
 			}
 		}
 	})
 
+	logger.Infof("Begin download article pdf, articleID: %d, pdfFileName: %s", aid, pdfFileName)
 	err := chromedp.Run(ctx,
 		chromedp.Tasks{
 			chromedp.Emulate(device.IPadPro11),
@@ -66,8 +70,10 @@ func PrintArticlePageToPDF(ctx context.Context,
 	)
 	if err != nil {
 		if rateLimit {
+			logger.Warnf("Hit GeekTime rate limit when downloading article pdf, articleID: %d, pdfFileName: %s", aid, pdfFileName)
 			return geektime.ErrGeekTimeRateLimit
 		}
+		logger.Errorf(err, "Failed to download article pdf")
 		return err
 	}
 
@@ -193,7 +199,7 @@ func printToPDF(fileName string) chromedp.ActionFunc {
 			_ = reader.Close()
 		}()
 
-		file, _ := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0666)
+		file, _ := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0o666)
 
 		defer func() {
 			_ = file.Close()
@@ -205,6 +211,8 @@ func printToPDF(fileName string) chromedp.ActionFunc {
 		if err != nil {
 			return err
 		}
+
+		logger.Infof("Finish download article pdf, pdfFileName: %s", fileName)
 
 		return nil
 	})

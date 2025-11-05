@@ -13,9 +13,11 @@ import (
 	"sync"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
+
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/downloader"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 var (
@@ -39,6 +41,8 @@ func (ms *markdownString) ReplaceAll(o, n string) {
 
 // Download article as markdown
 func Download(ctx context.Context, html, title, dir string, aid int) error {
+	logger.Infof("Begin download article markdown, articleID: %d, title: %s", aid, title)
+
 	select {
 	case <-ctx.Done():
 		return context.Canceled
@@ -50,6 +54,7 @@ func Download(ctx context.Context, html, title, dir string, aid int) error {
 	// step1: convert to md string
 	markdown, err := getDefaultConverter().ConvertString(html)
 	if err != nil {
+		logger.Errorf(err, "Failed to convert article html to markdown, articleID: %d, title: %s", aid, title)
 		return err
 	}
 	// step2: download images
@@ -68,6 +73,7 @@ func Download(ctx context.Context, html, title, dir string, aid int) error {
 
 	err = writeImageFile(ctx, imageURLs, dir, imagesFolder, ss)
 	if err != nil {
+		logger.Errorf(err, "Failed to download article images, articleID: %d, title: %s, imagesURLs: %v", aid, title, imageURLs)
 		return err
 	}
 
@@ -83,6 +89,7 @@ func Download(ctx context.Context, html, title, dir string, aid int) error {
 	if err != nil {
 		return err
 	}
+	logger.Infof("Finish download article markdown, articleID: %d, title: %s", aid, title)
 	return nil
 }
 
