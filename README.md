@@ -66,7 +66,7 @@ Usage:
   geektime-downloader [flags]
 
 Flags:
-      --comments                是否需要专栏的第一页评论 (default true)
+      --comments                是否下载评论(0不下载,1下载首页评论,2下载所有评论) (default 1)
       --enterprise              是否下载企业版极客时间资源
   -f, --folder string           专栏和视频课的下载目标位置 (default "C:\\Users\\nico\\geektime-downloader")
       --gcess string            极客时间 cookie 值 gcess
@@ -75,7 +75,7 @@ Flags:
       --interval int            下载资源的间隔时间, 单位为秒, 默认1秒 (default 1)
       --output int              专栏的输出内容(1pdf,2markdown,4audio)可自由组合 (default 1)
       --print-pdf-timeout int   Chrome生成PDF的超时时间, 单位为秒, 默认60秒 (default 60)
-      --print-pdf-wait int      Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒 (default 8)
+      --print-pdf-wait int      Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认5秒 (default 5)
   -q, --quality string          下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
 ```
 

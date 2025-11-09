@@ -7,5 +7,4 @@ const (
 	StateInputProductID
 	StateProductAction
 	StateSelectArticle
-	StateExit
 )

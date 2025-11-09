@@ -62,13 +62,6 @@ func NewFSMRunner(ctx context.Context, cfg *config.AppConfig, geektimeClient *ge
 // Run executes the finite state machine loop, handling user input and state transitions.
 func (r *FSMRunner) Run() error {
 	for {
-		select {
-		case <-r.ctx.Done():
-			fmt.Println("\n⏹ 检测到取消信号，准备退出...")
-			return r.ctx.Err()
-		default:
-		}
-
 		var err error
 		switch r.currentState {
 		case StateSelectProductType:
@@ -107,22 +100,19 @@ func (r *FSMRunner) Run() error {
 			if err == nil {
 				err = r.handleSelectArticle(index)
 			}
-		case StateExit:
-			return nil
 		}
 
 		if err != nil {
 			switch {
 			case errors.Is(err, context.Canceled), errors.Is(err, promptui.ErrInterrupt):
-				fmt.Println("\n用户中断操作")
+				return nil
 			case os.IsTimeout(err):
 				logger.Errorf(err, "Request timed out")
-				fmt.Fprintln(os.Stderr, "\n请求超时")
+				return fmt.Errorf("请求超时")
 			default:
 				logger.Errorf(err, "An error occurred")
-				fmt.Fprintf(os.Stderr, "\nAn error occurred: %v\n", err)
+				return err
 			}
-			return err
 		}
 	}
 }
@@ -167,6 +157,7 @@ func (r *FSMRunner) handleInputProductIDIfNeedSelectArticle(productID int) error
 	if !course.Access {
 		fmt.Fprint(os.Stderr, "尚未购买该课程\n")
 		r.currentState = StateInputProductID
+		return nil
 	}
 	r.selectedProduct = course
 	r.currentState = StateProductAction
@@ -411,7 +402,6 @@ func (r *FSMRunner) downloadTextArticle(article geektime.Article, columnDir stri
 	}
 	return nil
 }
-
 
 func (r *FSMRunner) skipDownloadVideoArticle(article geektime.Article, columnDir string, overwrite bool) bool {
 	dir := columnDir
