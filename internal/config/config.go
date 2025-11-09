@@ -10,7 +10,7 @@ type AppConfig struct {
 	Gcess                  string
 	DownloadFolder         string
 	Quality                string
-	DownloadComments       bool
+	DownloadComments       int
 	ColumnOutputType       int
 	PrintPDFWaitSeconds    int
 	PrintPDFTimeoutSeconds int

@@ -312,10 +312,36 @@ func (r *FSMRunner) downloadArticle(article geektime.Article, columnDir string) 
 }
 
 func (r *FSMRunner) skipDownloadTextArticle(article geektime.Article, columnDir string, overwrite bool) bool {
+	if overwrite {
+		return false
+	}
+
 	needDownloadPDF := r.config.ColumnOutputType&outputPDF != 0
 	needDownloadMD := r.config.ColumnOutputType&outputMD != 0
 	needDownloadAudio := r.config.ColumnOutputType&outputAudio != 0
-	return skipDownloadAllTextArticleFiles(columnDir, article, needDownloadPDF, needDownloadMD, needDownloadAudio, overwrite)
+
+	// Check only the files that are requested.
+	// If any requested file does not exist, do not skip.
+	if needDownloadPDF {
+		pdfFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+pdf.PDFExtension)
+		if !files.CheckFileExists(pdfFileName) {
+			return false
+		}
+	}
+	if needDownloadMD {
+		markdownFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+markdown.MDExtension)
+		if !files.CheckFileExists(markdownFileName) {
+			return false
+		}
+	}
+	if needDownloadAudio {
+		audioFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+audio.MP3Extension)
+		if !files.CheckFileExists(audioFileName) {
+			return false
+		}
+	}
+
+	return false
 }
 
 // downloadTextArticle downloads the content of a Geektime text article in various formats (PDF, Markdown, Audio, and Video).
@@ -386,41 +412,6 @@ func (r *FSMRunner) downloadTextArticle(article geektime.Article, columnDir stri
 	return nil
 }
 
-func skipDownloadAllTextArticleFiles(columnDir string, article geektime.Article, needDownloadPDF, needDownloadMD, needDownloadAudio, overwrite bool) bool {
-	pdfFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+pdf.PDFExtension)
-	markdownFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+markdown.MDExtension)
-	audioFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+audio.MP3Extension)
-	// If no output type is selected, do not skip
-	if !needDownloadPDF && !needDownloadMD && !needDownloadAudio {
-		return false
-	}
-
-	// Check only the files that are requested.
-	// If any requested file does not exist, do not skip.
-	if needDownloadPDF {
-		if !files.CheckFileExists(pdfFileName) {
-			return false
-		}
-	}
-	if needDownloadMD {
-		if !files.CheckFileExists(markdownFileName) {
-			return false
-		}
-	}
-	if needDownloadAudio {
-		if !files.CheckFileExists(audioFileName) {
-			return false
-		}
-	}
-
-	// All requested files exist. If overwrite is false, skip downloading.
-	if !overwrite {
-		return true
-	}
-
-	// Overwrite requested -> do not skip.
-	return false
-}
 
 func (r *FSMRunner) skipDownloadVideoArticle(article geektime.Article, columnDir string, overwrite bool) bool {
 	dir := columnDir
