@@ -104,7 +104,13 @@ func (r *FSMRunner) Run() error {
 
 		if err != nil {
 			switch {
-			case errors.Is(err, context.Canceled), errors.Is(err, promptui.ErrInterrupt):
+			case errors.Is(err, context.Canceled):
+				// clear line
+				fmt.Print("\033[1A\033[2K")
+				return nil
+			case errors.Is(err, promptui.ErrInterrupt):
+				// clear two lines beacause promptui print one more line if interrupt
+				fmt.Print("\033[1A\033[2K\033[1A\033[2K")
 				return nil
 			case os.IsTimeout(err):
 				logger.Errorf(err, "Request timed out")
@@ -121,6 +127,8 @@ func (r *FSMRunner) handleInputProductIDIfNeedSelectArticle(productID int) error
 	// choose download all or download specified article
 	r.sp.Prefix = "[ 正在加载课程信息... ]"
 	r.sp.Start()
+	defer r.sp.Stop()
+
 	var course geektime.Course
 	var err error
 	if r.isUniversity() {
@@ -128,14 +136,12 @@ func (r *FSMRunner) handleInputProductIDIfNeedSelectArticle(productID int) error
 		// if input invalid id, access mark is 0
 		course, err = r.geektimeClient.UniversityCourseInfo(productID)
 		if err != nil {
-			r.sp.Stop()
 			return err
 		}
 	} else if r.config.IsEnterprise {
 		// TODO: check enterprise course type
 		course, err = r.geektimeClient.EnterpriseCourseInfo(productID)
 		if err != nil {
-			r.sp.Stop()
 			return err
 		}
 	} else {
@@ -144,7 +150,6 @@ func (r *FSMRunner) handleInputProductIDIfNeedSelectArticle(productID int) error
 			valid := r.validateProductCode(course.Type)
 			// if check product type fail, re-input product
 			if !valid {
-				r.sp.Stop()
 				r.currentState = StateInputProductID
 				return nil
 			}
@@ -152,8 +157,6 @@ func (r *FSMRunner) handleInputProductIDIfNeedSelectArticle(productID int) error
 			return err
 		}
 	}
-
-	r.sp.Stop()
 	if !course.Access {
 		fmt.Fprint(os.Stderr, "尚未购买该课程\n")
 		r.currentState = StateInputProductID
@@ -248,7 +251,7 @@ func (r *FSMRunner) handleDownloadAll() error {
 		for _, article := range r.selectedProduct.Articles {
 			skip := r.skipDownloadTextArticle(article, columnDir, false)
 			if !skip {
-				logger.Infof("开始下载文章：《%s》", article.Title)
+				logger.Infof("Begin download article, articleID: %d, articleTitle: %s", article.AID, article.Title)
 				err = r.downloadTextArticle(article, columnDir, false)
 				if err != nil {
 					return err
@@ -369,13 +372,10 @@ func (r *FSMRunner) downloadTextArticle(article geektime.Article, columnDir stri
 
 	if needDownloadPDF {
 		err := pdf.PrintArticlePageToPDF(r.ctx,
-			article.AID,
+			article,
 			columnDir,
-			article.Title,
 			r.geektimeClient.Cookies,
-			r.config.DownloadComments,
-			r.config.PrintPDFWaitSeconds,
-			r.config.PrintPDFTimeoutSeconds,
+			r.config,
 		)
 		if err != nil {
 			return err
@@ -439,7 +439,7 @@ func (r *FSMRunner) downloadVideoArticle(article geektime.Article, columnDir str
 
 // mkDownloadColumnDir creates a directory for downloading a column with the given columnName.
 func (r *FSMRunner) mkDownloadColumnDir(columnName string) (string, error) {
-	path := filepath.Join(r.config.DownloadFolder, r.config.Gcid, filenamify.Filenamify(columnName))
+	path := filepath.Join(r.config.DownloadFolder, filenamify.Filenamify(columnName))
 	err := os.MkdirAll(path, os.ModePerm)
 	if err != nil {
 		return "", err

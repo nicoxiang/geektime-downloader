@@ -245,6 +245,8 @@ func download(ctx context.Context,
 	bar := newBar(size, fmt.Sprintf("[正在下载 %s] ", filenamifyTitle))
 	bar.Start()
 
+	defer bar.Finish()
+
 	for _, tsFileName := range tsFileNames {
 		u := tsURLPrefix + tsFileName
 		dst := filepath.Join(tempVideoDir, tsFileName)
@@ -260,8 +262,6 @@ func download(ctx context.Context,
 
 		addBarValue(bar, fileSize)
 	}
-
-	bar.Finish()
 
 	// Read temp ts files, decrypt and merge into the one final video file
 	err = mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir, decryptKey, isVodEncryptVideo)

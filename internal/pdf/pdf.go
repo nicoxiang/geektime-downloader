@@ -20,6 +20,7 @@ import (
 	"github.com/chromedp/chromedp"
 	"github.com/chromedp/chromedp/device"
 
+	"github.com/nicoxiang/geektime-downloader/internal/config"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
@@ -52,22 +53,20 @@ type V4CommentListResponse struct {
 
 // PrintArticlePageToPDF use chromedp to print article page and save
 func PrintArticlePageToPDF(parentCtx context.Context,
-	aid int,
-	dir,
-	title string,
+	article geektime.Article,
+	dir string,
 	cookies []*http.Cookie,
-	downloadComments int,
-	printPDFWaitSeconds int,
-	printPDFTimeoutSeconds int,
+	cfg *config.AppConfig,
 ) error {
 	rateLimit := false
+	aid := article.AID
 
-	pdfFileName := filepath.Join(dir, filenamify.Filenamify(title)+PDFExtension)
+	pdfFileName := filepath.Join(dir, filenamify.Filenamify(article.Title)+PDFExtension)
 
 	ctx, cancel := chromedp.NewContext(parentCtx)
 	defer cancel()
 
-	ctx, cancel = context.WithTimeout(ctx, time.Duration(printPDFTimeoutSeconds)*time.Second)
+	ctx, cancel = context.WithTimeout(ctx, time.Duration(cfg.PrintPDFTimeoutSeconds)*time.Second)
 	defer cancel()
 
 	var commentsDone uint32 = 0
@@ -85,7 +84,7 @@ func PrintArticlePageToPDF(parentCtx context.Context,
 			}
 
 			// if downloadComments is DownloadCommentsAll, monitor comment list responses
-			if downloadComments == DownloadCommentsAll {
+			if cfg.DownloadComments == DownloadCommentsAll {
 				if strings.Contains(strings.ToLower(response.URL), "comment/list") {
 					reqID := responseReceivedEvent.RequestID
 					url := response.URL
@@ -101,10 +100,10 @@ func PrintArticlePageToPDF(parentCtx context.Context,
 		chromedp.Emulate(device.IPadPro11),
 		setCookies(cookies),
 		chromedp.Navigate(geektime.DefaultBaseURL + `/column/article/` + strconv.Itoa(aid)),
-		chromedp.Sleep(time.Duration(printPDFWaitSeconds) * time.Second),
+		chromedp.Sleep(time.Duration(cfg.PrintPDFWaitSeconds) * time.Second),
 	}
 
-	switch downloadComments {
+	switch cfg.DownloadComments {
 	case DownloadCommentsAll:
 		tasks = append(tasks, touchScrollAction(&commentsDone))
 	case DownloadCommentsNone:
