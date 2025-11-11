@@ -161,7 +161,3 @@ Markdown 格式虽然显示效果上不及 PDF，但优势为可以显示完整�
 ### 退出程序和继续下载
 
 Ctrl + C 退出程序。如果选择“下载所有”后中断程序，可重新进入程序继续下载。
-
-### 隐私相关
-
-通过密码登录的情况下，为了避免多次登录账户，会在目录 [UserConfigDir](https://pkg.go.dev/os#UserConfigDir)/geektime-downloader 下存放用户的登录 cookie，如果不是在自己的电脑上执行，建议在使用完毕程序后手动删除
