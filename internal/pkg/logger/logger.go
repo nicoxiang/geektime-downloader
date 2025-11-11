@@ -2,9 +2,11 @@ package logger
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -42,7 +44,7 @@ func (f *customFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	return []byte(message), nil
 }
 
-func init() {
+func Init(level string) {
 	userConfigDir, _ := os.UserConfigDir()
 	logDir := filepath.Join(userConfigDir, GeektimeLogFolder)
 	logFilePath := filepath.Join(logDir, GeektimeLogFolder+".log")
@@ -52,15 +54,32 @@ func init() {
 	}
 
 	logger.SetReportCaller(true)
-	logger.SetLevel(logrus.InfoLevel)
 	logger.SetFormatter(&customFormatter{})
+
+	switch strings.ToLower(level) {
+	case "debug":
+		logger.SetLevel(logrus.DebugLevel)
+	case "info":
+		logger.SetLevel(logrus.InfoLevel)
+	case "warn":
+		logger.SetLevel(logrus.WarnLevel)
+	case "error":
+		logger.SetLevel(logrus.ErrorLevel)
+	case "none":
+		// discard all logs
+		logger.SetOutput(io.Discard)
+		return
+	default:
+		logger.SetLevel(logrus.InfoLevel)
+	}
+
 	logFile, err := os.OpenFile(logFilePath, os.O_RDWR|os.O_CREATE|os.O_APPEND, 0o666)
 	if err == nil {
-		logger.Out = logFile
+		logger.SetOutput(logFile)
 	} else {
-		logger.Info("Failed to log to file, using default stderr")
+		fmt.Fprintf(os.Stderr, "Failed to log to file, using stderr\n")
+		logger.SetOutput(os.Stderr)
 	}
-	logger.SetOutput(logFile)
 }
 
 // Infof wrapper logrus log.Infof

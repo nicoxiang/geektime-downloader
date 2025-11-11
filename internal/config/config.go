@@ -23,6 +23,7 @@ type AppConfig struct {
 	PrintPDFTimeoutSeconds int
 	Interval               int
 	IsEnterprise           bool
+	LogLevel               string
 }
 
 func ReadCookiesFromInput(cfg *AppConfig) []*http.Cookie {

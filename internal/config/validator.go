@@ -16,6 +16,9 @@ func ValidateConfig(cfg *AppConfig) error {
 	if err := validateColumnOutputType(cfg); err != nil {
 		return err
 	}
+	if err := validateLogLevel(cfg); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -57,6 +60,24 @@ func validateQuality(cfg *AppConfig) error {
 
 	if !isValidQualityFlag {
 		return fmt.Errorf("argument 'quality' is not valid, must be one of ld, sd, hd")
+	}
+
+	return nil
+}
+
+func validateLogLevel(cfg *AppConfig) error {
+	validLogLevels := []string{"debug", "info", "warn", "error", "none"}
+
+	isValidLogLevel := false
+	for _, v := range validLogLevels {
+		if cfg.LogLevel == v {
+			isValidLogLevel = true
+			break
+		}
+	}
+
+	if !isValidLogLevel {
+		return fmt.Errorf("argument 'log-level' is not valid, must be one of debug, info, warn, error, none")
 	}
 
 	return nil

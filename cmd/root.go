@@ -11,6 +11,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/config"
 	"github.com/nicoxiang/geektime-downloader/internal/fsm"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 var (
@@ -32,6 +33,7 @@ func init() {
 	rootCmd.Flags().IntVar(&cfg.PrintPDFTimeoutSeconds, "print-pdf-timeout", 60, "Chrome生成PDF的超时时间, 单位为秒, 默认60秒")
 	rootCmd.Flags().IntVar(&cfg.Interval, "interval", 1, "下载资源的间隔时间, 单位为秒, 默认1秒")
 	rootCmd.Flags().BoolVar(&cfg.IsEnterprise, "enterprise", false, "是否下载企业版极客时间资源")
+	rootCmd.Flags().StringVar(&cfg.LogLevel, "log-level", "info", "日志记录级别(debug, info, warn, error, none)")
 
 	rootCmd.MarkFlagsRequiredTogether("gcid", "gcess")
 }
@@ -41,6 +43,7 @@ var rootCmd = &cobra.Command{
 	Short:        "Geektime-downloader is used to download geek time lessons",
 	SilenceUsage: true,
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		logger.Init(cfg.LogLevel)
 		return config.ValidateConfig(&cfg)
 	},
 	RunE: func(cmd *cobra.Command, args []string) error {
