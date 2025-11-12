@@ -335,7 +335,7 @@ func (r *FSMRunner) skipDownloadTextArticle(article geektime.Article, columnDir 
 		}
 	}
 
-	return false
+	return true
 }
 
 // downloadTextArticle downloads the content of a Geektime text article in various formats (PDF, Markdown, Audio, and Video).

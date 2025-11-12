@@ -20,6 +20,7 @@ import (
 type Part struct {
 	Data  []byte
 	Index int
+	Offset int64
 }
 
 // DownloadFileConcurrently download file in chunks, return total file size
@@ -42,6 +43,23 @@ func DownloadFileConcurrently(ctx context.Context, filepath string, url string, 
 	}
 
 	fileSize, _ := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+	if fileSize <= 0 {
+		out, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o666)
+		if err != nil {
+			return 0, err
+		}
+		defer func() {
+			_ = out.Close()
+		}()
+		return fileSize, nil
+	}
+
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	if int64(concurrency) > fileSize {
+		concurrency = int(fileSize)
+	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -56,39 +74,58 @@ func DownloadFileConcurrently(ctx context.Context, filepath string, url string, 
 		})
 	}
 
+	errCh := make(chan error, 1)
 	go func() {
-		err = g.Wait()
+		err := g.Wait()
 		close(results)
+		errCh <- err
+		close(errCh)
 	}()
 
-	out, err := os.OpenFile(filepath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, os.ModePerm)
+	out, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o666)
 	if err != nil {
 		return 0, err
 	}
+	removeOnError := false
 	defer func() {
 		_ = out.Close()
+		if removeOnError {
+			_ = os.Remove(filepath)
+		}
 	}()
 
-	counter := 0
-	parts := make([][]byte, concurrency)
+	nextIndex := 0
+	pending := make(map[int]Part, concurrency)
+	var writeErr error
+
 	for part := range results {
-		counter++
-
-		parts[part.Index] = part.Data
-		if counter == concurrency {
-			break
+		if writeErr != nil {
+			continue
+		}
+		pending[part.Index] = part
+		for {
+			nextPart, ok := pending[nextIndex]
+			if !ok {
+				break
+			}
+			_, err := out.WriteAt(nextPart.Data, nextPart.Offset)
+			if err != nil {
+				writeErr = err
+				break
+			}
+			delete(pending, nextIndex)
+			nextIndex++
 		}
 	}
 
-	if err != nil {
+	if writeErr != nil {
+		removeOnError = true
+		return 0, writeErr
+	}
+
+	if err := <-errCh; err != nil {
+		removeOnError = true
 		return 0, err
-	}
-
-	for _, part := range parts {
-		_, err = out.Write(part)
-		if err != nil {
-			return 0, err
-		}
 	}
 
 	return fileSize, nil
@@ -132,7 +169,7 @@ func download(ctx context.Context, workers int, index int, chunkSize int64, url 
 		if err != nil {
 			return err
 		}
-		c <- Part{Index: index, Data: body}
+		c <- Part{Index: index, Offset: start, Data: body}
 		return nil
 	})
 	if err != nil {
