@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -51,6 +52,12 @@ type V4CommentListResponse struct {
 	} `json:"extra"`
 }
 
+var (
+	browserCtxMu      sync.Mutex
+	sharedBrowserCtx  context.Context
+	sharedBrowserStop context.CancelFunc
+)
+
 // PrintArticlePageToPDF use chromedp to print article page and save
 func PrintArticlePageToPDF(parentCtx context.Context,
 	article geektime.Article,
@@ -63,15 +70,22 @@ func PrintArticlePageToPDF(parentCtx context.Context,
 
 	pdfFileName := filepath.Join(dir, filenamify.Filenamify(article.Title)+PDFExtension)
 
-	ctx, cancel := chromedp.NewContext(parentCtx)
-	defer cancel()
+	tabCtx, tabCancel, err := acquireBrowserTabContext(parentCtx)
+	if err != nil {
+		logger.Errorf(err, "Failed to acquire shared browser context")
+		return err
+	}
+	defer tabCancel()
 
-	ctx, cancel = context.WithTimeout(ctx, time.Duration(cfg.PrintPDFTimeoutSeconds)*time.Second)
-	defer cancel()
+	timeoutCtx, timeoutCancel := context.WithTimeout(tabCtx, time.Duration(cfg.PrintPDFTimeoutSeconds)*time.Second)
+	defer timeoutCancel()
 
 	var commentsDone uint32 = 0
 
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
+	listenerCtx, listenerCtxCancel := context.WithCancel(timeoutCtx)
+	defer listenerCtxCancel()
+
+	listener := func(ev interface{}) {
 		switch responseReceivedEvent := ev.(type) {
 		case *network.EventResponseReceived:
 			response := responseReceivedEvent.Response
@@ -79,7 +93,8 @@ func PrintArticlePageToPDF(parentCtx context.Context,
 			if response.URL == geektime.DefaultBaseURL+"/serv/v1/article" && response.Status == 451 {
 				logger.Warnf("Hit GeekTime rate limit when downloading article pdf, articleID: %d, pdfFileName: %s", aid, pdfFileName)
 				rateLimit = true
-				cancel()
+				timeoutCancel()
+				listenerCtxCancel()
 				return
 			}
 
@@ -89,11 +104,12 @@ func PrintArticlePageToPDF(parentCtx context.Context,
 					reqID := responseReceivedEvent.RequestID
 					url := response.URL
 
-					fetchAndHandleCommentList(ctx, reqID, url, &commentsDone)
+					fetchAndHandleCommentList(listenerCtx, reqID, url, &commentsDone)
 				}
 			}
 		}
-	})
+	}
+	chromedp.ListenTarget(listenerCtx, listener)
 
 	tasks := chromedp.Tasks{
 		network.Enable(),
@@ -114,7 +130,7 @@ func PrintArticlePageToPDF(parentCtx context.Context,
 
 	logger.Infof("Begin download article pdf, articleID: %d, pdfFileName: %s", aid, pdfFileName)
 
-	err := chromedp.Run(ctx, tasks)
+	err = chromedp.Run(timeoutCtx, tasks)
 	if err != nil {
 		if rateLimit {
 			logger.Warnf("Hit GeekTime rate limit when downloading article pdf, articleID: %d, pdfFileName: %s", aid, pdfFileName)
@@ -343,4 +359,39 @@ func fetchAndHandleCommentList(ctx context.Context, reqID network.RequestID, url
 			logger.Errorf(nil, "Failed to fetch comment list, response code: %d", commentResp.Code)
 		}
 	}()
+}
+
+func acquireBrowserTabContext(parentCtx context.Context) (context.Context, context.CancelFunc, error) {
+	rootCtx, err := sharedBrowserContext(parentCtx)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	ctx, cancel := chromedp.NewContext(rootCtx)
+	return ctx, cancel, nil
+}
+
+func sharedBrowserContext(parentCtx context.Context) (context.Context, error) {
+	browserCtxMu.Lock()
+	defer browserCtxMu.Unlock()
+
+	if sharedBrowserCtx != nil {
+		select {
+		case <-sharedBrowserCtx.Done():
+			if sharedBrowserStop != nil {
+				sharedBrowserStop()
+			}
+			sharedBrowserCtx = nil
+			sharedBrowserStop = nil
+		default:
+		}
+	}
+
+	if sharedBrowserCtx == nil {
+		ctx, cancel := chromedp.NewContext(parentCtx)
+		sharedBrowserCtx = ctx
+		sharedBrowserStop = cancel
+	}
+
+	return sharedBrowserCtx, nil
 }

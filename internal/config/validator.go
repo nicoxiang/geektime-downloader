@@ -19,6 +19,9 @@ func ValidateConfig(cfg *AppConfig) error {
 	if err := validateLogLevel(cfg); err != nil {
 		return err
 	}
+	if err := validateTiming(cfg); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -86,6 +89,22 @@ func validateLogLevel(cfg *AppConfig) error {
 func validateColumnOutputType(cfg *AppConfig) error {
 	if cfg.ColumnOutputType <= 0 || cfg.ColumnOutputType >= 8 {
 		return fmt.Errorf("argument 'output' is not valid, must be between 1 and 7")
+	}
+
+	return nil
+}
+
+func validateTiming(cfg *AppConfig) error {
+	if cfg.Interval < 0 || cfg.Interval > 10 {
+		return fmt.Errorf("argument 'interval' must be between 0 and 10")
+	}
+
+	if cfg.PrintPDFWaitSeconds < 0 || cfg.PrintPDFWaitSeconds > 60 {
+		return fmt.Errorf("argument 'print-pdf-wait' must be between 0 and 60")
+	}
+
+	if cfg.PrintPDFTimeoutSeconds <= 0 || cfg.PrintPDFTimeoutSeconds > 120 {
+		return fmt.Errorf("argument 'print-pdf-timeout' must be between 1 and 120")
 	}
 
 	return nil
