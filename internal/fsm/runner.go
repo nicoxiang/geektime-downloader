@@ -277,8 +277,12 @@ func (r *FSMRunner) handleDownloadAll() error {
 }
 
 func increaseDownloadedTextArticleCount(total int, i *int) {
-	*i++
-	fmt.Printf("\r已完成下载%d/%d", *i, total)
+	current := *i + 1
+	*i = current
+	if current > total {
+		current = total
+	}
+	fmt.Printf("\r已完成下载%d/%d", current, total)
 }
 
 // downloadArticle processes the download of a single article from Geektime.
