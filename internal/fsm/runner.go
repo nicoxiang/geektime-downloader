@@ -4,28 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
-	"math/rand"
 	"os"
-	"path/filepath"
-	"runtime"
-	"strings"
 	"time"
 
 	"github.com/briandowns/spinner"
 	"github.com/manifoldco/promptui"
-	"golang.org/x/net/html"
 
-	"github.com/nicoxiang/geektime-downloader/internal/audio"
 	"github.com/nicoxiang/geektime-downloader/internal/config"
+	"github.com/nicoxiang/geektime-downloader/internal/course"
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
-	"github.com/nicoxiang/geektime-downloader/internal/markdown"
-	"github.com/nicoxiang/geektime-downloader/internal/pdf"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/files"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 	"github.com/nicoxiang/geektime-downloader/internal/ui"
-	"github.com/nicoxiang/geektime-downloader/internal/video"
 )
 
 type FSMRunner struct {
@@ -36,26 +25,19 @@ type FSMRunner struct {
 	selectedProduct     geektime.Course
 	sp                  *spinner.Spinner
 	geektimeClient      *geektime.Client
-	waitRand            *rand.Rand
-	concurrency         int
+	courseDownloader    *course.CourseDownloader
 }
-
-const (
-	outputPDF   = 1 << 0 // 1
-	outputMD    = 1 << 1 // 2
-	outputAudio = 1 << 2 // 4
-)
 
 // NewFSMRunner creates and initializes a new FSMRunner instance
 func NewFSMRunner(ctx context.Context, cfg *config.AppConfig, geektimeClient *geektime.Client) *FSMRunner {
+	sp := spinner.New(spinner.CharSets[4], 100*time.Millisecond)
 	return &FSMRunner{
-		ctx:            ctx,
-		currentState:   StateSelectProductType,
-		config:         cfg,
-		sp:             spinner.New(spinner.CharSets[4], 100*time.Millisecond),
-		geektimeClient: geektimeClient,
-		concurrency:    int(math.Ceil(float64(runtime.NumCPU()) / 2.0)),
-		waitRand:       rand.New(rand.NewSource(time.Now().UnixNano())),
+		ctx:              ctx,
+		currentState:     StateSelectProductType,
+		config:           cfg,
+		sp:               sp,
+		geektimeClient:   geektimeClient,
+		courseDownloader: course.NewCourseDownloader(ctx, cfg, geektimeClient, sp),
 	}
 }
 
@@ -131,30 +113,33 @@ func (r *FSMRunner) handleInputProductIDIfNeedSelectArticle(productID int) error
 
 	var course geektime.Course
 	var err error
-	if r.isUniversity() {
-		// university don't need check product type
-		// if input invalid id, access mark is 0
-		course, err = r.geektimeClient.UniversityCourseInfo(productID)
-		if err != nil {
-			return err
-		}
-	} else if r.config.IsEnterprise {
+	if r.selectedProductType.IsEnterpriseMode {
 		// TODO: check enterprise course type
 		course, err = r.geektimeClient.EnterpriseCourseInfo(productID)
 		if err != nil {
 			return err
 		}
+
 	} else {
-		course, err = r.geektimeClient.CourseInfo(productID)
-		if err == nil {
-			valid := r.validateProductCode(course.Type)
-			// if check product type fail, re-input product
-			if !valid {
-				r.currentState = StateInputProductID
-				return nil
+		if r.selectedProductType.IsUniversity() {
+			// university don't need check product type
+			// if input invalid id, access mark is 0
+			course, err = r.geektimeClient.UniversityCourseInfo(productID)
+			if err != nil {
+				return err
 			}
 		} else {
-			return err
+			course, err = r.geektimeClient.CourseInfo(productID)
+			if err == nil {
+				valid := r.validateProductCode(course.Type)
+				// if check product type fail, re-input product
+				if !valid {
+					r.currentState = StateInputProductID
+					return nil
+				}
+			} else {
+				return err
+			}
 		}
 	}
 	if !course.Access {
@@ -183,18 +168,9 @@ func (r *FSMRunner) handleInputProductIDIfDownloadDirectly(productID int) error 
 	}
 
 	if r.validateProductCode(productInfo.Data.Info.Type) {
-		columnDir, err := r.mkDownloadColumnDir(productInfo.Data.Info.Title)
-		if err != nil {
-			return err
-		}
-
-		err = video.DownloadArticleVideo(r.ctx,
-			r.geektimeClient,
+		err = r.courseDownloader.DownloadSingleVideoProduct(productInfo.Data.Info.Title,
 			productInfo.Data.Info.Article.ID,
-			r.selectedProductType.SourceType,
-			columnDir,
-			r.config.Quality,
-			r.concurrency)
+			r.selectedProductType.SourceType)
 		if err != nil {
 			return err
 		}
@@ -222,11 +198,7 @@ func (r *FSMRunner) handleSelectArticle(index int) error {
 	}
 	a := r.selectedProduct.Articles[index-1]
 
-	columnDir, err := r.mkDownloadColumnDir(r.selectedProduct.Title)
-	if err != nil {
-		return err
-	}
-	err = r.downloadArticle(a, columnDir)
+	err := r.courseDownloader.DownloadArticle(r.selectedProduct, r.selectedProductType, a, true)
 	if err != nil {
 		return err
 	}
@@ -239,270 +211,9 @@ func (r *FSMRunner) handleSelectArticle(index int) error {
 // handleDownloadAll manages the bulk download process for all articles in a selected product (course).
 // Returns an error if any step in the download process fails.
 func (r *FSMRunner) handleDownloadAll() error {
-	columnDir, err := r.mkDownloadColumnDir(r.selectedProduct.Title)
-	if err != nil {
+	if err := r.courseDownloader.DownloadAll(r.selectedProduct, r.selectedProductType); err != nil {
 		return err
-	}
-	if geektime.IsTextCourse(r.selectedProduct) {
-		fmt.Printf("正在下载专栏 《%s》 中的所有文章\n", r.selectedProduct.Title)
-		total := len(r.selectedProduct.Articles)
-		var i int
-
-		for _, article := range r.selectedProduct.Articles {
-			skip := r.skipDownloadTextArticle(article, columnDir, false)
-			if !skip {
-				logger.Infof("Begin download article, articleID: %d, articleTitle: %s", article.AID, article.Title)
-				err = r.downloadTextArticle(article, columnDir, false)
-				if err != nil {
-					return err
-				}
-				r.waitRandomTime()
-			}
-			increaseDownloadedTextArticleCount(total, &i)
-		}
-	} else {
-		for _, article := range r.selectedProduct.Articles {
-			skip := r.skipDownloadVideoArticle(article, columnDir, false)
-			if !skip {
-				err = r.downloadVideoArticle(article, columnDir)
-				if err != nil {
-					return err
-				}
-				r.waitRandomTime()
-			}
-		}
 	}
 	r.currentState = StateSelectProductType
 	return nil
-}
-
-func increaseDownloadedTextArticleCount(total int, i *int) {
-	current := *i + 1
-	*i = current
-	if current > total {
-		current = total
-	}
-	fmt.Printf("\r已完成下载%d/%d", current, total)
-}
-
-// downloadArticle processes the download of a single article from Geektime.
-// It handles both text-based courses and video content differently.
-func (r *FSMRunner) downloadArticle(article geektime.Article, columnDir string) error {
-	var err error
-	if geektime.IsTextCourse(r.selectedProduct) {
-		r.sp.Prefix = fmt.Sprintf("[ 正在下载 《%s》... ]", article.Title)
-		r.sp.Start()
-		defer r.sp.Stop()
-		skip := r.skipDownloadTextArticle(article, columnDir, true)
-		if !skip {
-			err = r.downloadTextArticle(article, columnDir, true)
-		}
-	} else {
-		skip := r.skipDownloadVideoArticle(article, columnDir, true)
-		if !skip {
-			err = r.downloadVideoArticle(article, columnDir)
-		}
-	}
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-func (r *FSMRunner) skipDownloadTextArticle(article geektime.Article, columnDir string, overwrite bool) bool {
-	if overwrite {
-		return false
-	}
-
-	needDownloadPDF := r.config.ColumnOutputType&outputPDF != 0
-	needDownloadMD := r.config.ColumnOutputType&outputMD != 0
-	needDownloadAudio := r.config.ColumnOutputType&outputAudio != 0
-
-	// Check only the files that are requested.
-	// If any requested file does not exist, do not skip.
-	if needDownloadPDF {
-		pdfFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+pdf.PDFExtension)
-		if !files.CheckFileExists(pdfFileName) {
-			return false
-		}
-	}
-	if needDownloadMD {
-		markdownFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+markdown.MDExtension)
-		if !files.CheckFileExists(markdownFileName) {
-			return false
-		}
-	}
-	if needDownloadAudio {
-		audioFileName := filepath.Join(columnDir, filenamify.Filenamify(article.Title)+audio.MP3Extension)
-		if !files.CheckFileExists(audioFileName) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// downloadTextArticle downloads the content of a Geektime text article in various formats (PDF, Markdown, Audio, and Video).
-// The function supports overwriting existing files if specified.
-func (r *FSMRunner) downloadTextArticle(article geektime.Article, columnDir string, overwrite bool) error {
-	needDownloadPDF := r.config.ColumnOutputType&outputPDF != 0
-	needDownloadMD := r.config.ColumnOutputType&outputMD != 0
-	needDownloadAudio := r.config.ColumnOutputType&outputAudio != 0
-
-	var err error
-	articleInfo, err := r.geektimeClient.V1ArticleInfo(article.AID)
-	if err != nil {
-		return err
-	}
-
-	hasVideo, videoURL := getVideoURLFromArticleContent(articleInfo.Data.ArticleContent)
-	if hasVideo && videoURL != "" {
-		err = video.DownloadMP4(r.ctx, article.Title, columnDir, []string{videoURL}, overwrite)
-		if err != nil {
-			return err
-		}
-	}
-
-	if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
-		videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
-		for i, v := range articleInfo.Data.InlineVideoSubtitles {
-			videoURLs[i] = v.VideoURL
-		}
-		err = video.DownloadMP4(r.ctx, article.Title, columnDir, videoURLs, overwrite)
-		if err != nil {
-			return err
-		}
-	}
-
-	if needDownloadPDF {
-		err := pdf.PrintArticlePageToPDF(r.ctx,
-			article,
-			columnDir,
-			r.geektimeClient.Cookies,
-			r.config,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	if needDownloadMD {
-		err := markdown.Download(r.ctx,
-			articleInfo.Data.ArticleContent,
-			article.Title,
-			columnDir,
-			article.AID,
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	if needDownloadAudio {
-		err := audio.DownloadAudio(r.ctx, articleInfo.Data.AudioDownloadURL, columnDir, article.Title)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (r *FSMRunner) skipDownloadVideoArticle(article geektime.Article, columnDir string, overwrite bool) bool {
-	dir := columnDir
-	fileName := filenamify.Filenamify(article.Title) + video.TSExtension
-	fullPath := filepath.Join(dir, fileName)
-	if files.CheckFileExists(fullPath) && !overwrite {
-		return true
-	}
-	return false
-}
-
-// downloadVideoArticle downloads a video article to the specified column directory.
-// It handles different types of video content including university courses, enterprise content,
-// and regular article videos.
-func (r *FSMRunner) downloadVideoArticle(article geektime.Article, columnDir string) error {
-	dir := columnDir
-	var err error
-	// add sub dir
-	if article.SectionTitle != "" {
-		dir, err = r.mkDownloadProjectSectionDir(columnDir, article.SectionTitle)
-		if err != nil {
-			return err
-		}
-	}
-
-	if r.isUniversity() {
-		err = video.DownloadUniversityVideo(r.ctx, r.geektimeClient, article.AID, r.selectedProduct, dir, r.config.Quality, r.concurrency)
-	} else if r.config.IsEnterprise {
-		err = video.DownloadEnterpriseArticleVideo(r.ctx, r.geektimeClient, article.AID, dir, r.config.Quality, r.concurrency)
-	} else {
-		err = video.DownloadArticleVideo(r.ctx, r.geektimeClient, article.AID, r.selectedProductType.SourceType, dir, r.config.Quality, r.concurrency)
-	}
-	return err
-}
-
-// mkDownloadColumnDir creates a directory for downloading a column with the given columnName.
-func (r *FSMRunner) mkDownloadColumnDir(columnName string) (string, error) {
-	path := filepath.Join(r.config.DownloadFolder, filenamify.Filenamify(columnName))
-	err := os.MkdirAll(path, os.ModePerm)
-	if err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
-func (r *FSMRunner) mkDownloadProjectSectionDir(projectDir, sectionName string) (string, error) {
-	path := filepath.Join(projectDir, filenamify.Filenamify(sectionName))
-	err := os.MkdirAll(path, os.ModePerm)
-	if err != nil {
-		return "", err
-	}
-	return path, nil
-}
-
-// Sometime video exist in article content, see issue #104
-// <p>
-// <video poster="https://static001.geekbang.org/resource/image/6a/f7/6ada085b44eddf37506b25ad188541f7.jpg" preload="none" controls="">
-// <source src="https://media001.geekbang.org/customerTrans/fe4a99b62946f2c31c2095c167b26f9c/30d99c0d-16d14089303-0000-0000-01d-dbacd.mp4" type="video/mp4">
-// <source src="https://media001.geekbang.org/2ce11b32e3e740ff9580185d8c972303/a01ad13390fe4afe8856df5fb5d284a2-f2f547049c69fa0d4502ab36d42ea2fa-sd.m3u8" type="application/x-mpegURL">
-// <source src="https://media001.geekbang.org/2ce11b32e3e740ff9580185d8c972303/a01ad13390fe4afe8856df5fb5d284a2-2528b0077e78173fd8892de4d7b8c96d-hd.m3u8" type="application/x-mpegURL"></video>
-// </p>
-func getVideoURLFromArticleContent(content string) (hasVideo bool, videoURL string) {
-	if !strings.Contains(content, "<video") || !strings.Contains(content, "<source") {
-		return false, ""
-	}
-	doc, err := html.Parse(strings.NewReader(content))
-	if err != nil {
-		return false, ""
-	}
-	hasVideo, videoURL = false, ""
-	var f func(*html.Node)
-	f = func(n *html.Node) {
-		if n.Type == html.ElementNode && n.Data == "video" {
-			hasVideo = true
-		}
-		if n.Type == html.ElementNode && n.Data == "source" {
-			for _, a := range n.Attr {
-				if a.Key == "src" && hasVideo && strings.HasSuffix(a.Val, ".mp4") {
-					videoURL = a.Val
-					break
-				}
-			}
-		}
-		for c := n.FirstChild; c != nil; c = c.NextSibling {
-			f(c)
-		}
-	}
-	f(doc)
-	return hasVideo, videoURL
-}
-
-// waitRandomTime wait interval seconds of time plus a 2000ms max jitter
-func (r *FSMRunner) waitRandomTime() {
-	randomMillis := r.config.Interval*1000 + r.waitRand.Intn(2000)
-	time.Sleep(time.Duration(randomMillis) * time.Millisecond)
-}
-
-func (r *FSMRunner) isUniversity() bool {
-	return r.selectedProductType.Index == 4 && !r.config.IsEnterprise
 }
