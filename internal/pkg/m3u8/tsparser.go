@@ -119,7 +119,7 @@ func (p *TSParser) decryptPES(byteBuf []byte, pesFragments []*tsPesFragment, key
 		for _, packet := range pes.packets {
 			payloadLength := packet.payloadLength
 			payloadStartOffset := packet.payloadStartOffset
-			buffer.Read(byteBuf[payloadStartOffset : payloadStartOffset+payloadLength])
+			_, _ = buffer.Read(byteBuf[payloadStartOffset : payloadStartOffset+payloadLength])
 		}
 	}
 }
@@ -138,7 +138,7 @@ func (stream *tsStream) parseTS() {
 	packNums := length / packetLength
 	for packageNo := 0; packageNo < packNums; packageNo++ {
 		buffer := make([]byte, packetLength)
-		byteBuf.Read(buffer)
+		_, _ = byteBuf.Read(buffer)
 		packet := stream.parseTSPacket(buffer, packageNo, packageNo*packetLength)
 		switch packet.header.pid {
 		// video data

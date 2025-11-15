@@ -66,16 +66,17 @@ Usage:
   geektime-downloader [flags]
 
 Flags:
-      --comments                是否需要专栏的第一页评论 (default true)
+      --comments int            是否下载评论(0不下载,1下载首页评论,2下载所有评论) (default 1)
       --enterprise              是否下载企业版极客时间资源
   -f, --folder string           专栏和视频课的下载目标位置 (default "C:\\Users\\nico\\geektime-downloader")
       --gcess string            极客时间 cookie 值 gcess
       --gcid string             极客时间 cookie 值 gcid
   -h, --help                    help for geektime-downloader
       --interval int            下载资源的间隔时间, 单位为秒, 默认1秒 (default 1)
+      --log-level string        日志记录级别(debug, info, warn, error, none) (default "info")
       --output int              专栏的输出内容(1pdf,2markdown,4audio)可自由组合 (default 1)
       --print-pdf-timeout int   Chrome生成PDF的超时时间, 单位为秒, 默认60秒 (default 60)
-      --print-pdf-wait int      Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认8秒 (default 8)
+      --print-pdf-wait int      Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认5秒 (default 5)
   -q, --quality string          下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
 ```
 
@@ -160,7 +161,3 @@ Markdown 格式虽然显示效果上不及 PDF，但优势为可以显示完整�
 ### 退出程序和继续下载
 
 Ctrl + C 退出程序。如果选择“下载所有”后中断程序，可重新进入程序继续下载。
-
-### 隐私相关
-
-通过密码登录的情况下，为了避免多次登录账户，会在目录 [UserConfigDir](https://pkg.go.dev/os#UserConfigDir)/geektime-downloader 下存放用户的登录 cookie，如果不是在自己的电脑上执行，建议在使用完毕程序后手动删除

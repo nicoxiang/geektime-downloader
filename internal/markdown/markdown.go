@@ -13,10 +13,11 @@ import (
 	"sync"
 
 	md "github.com/JohannesKaufmann/html-to-markdown"
+
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/downloader"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/filenamify"
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/files"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 var (
@@ -39,53 +40,57 @@ func (ms *markdownString) ReplaceAll(o, n string) {
 }
 
 // Download article as markdown
-func Download(ctx context.Context, html, title, dir string, aid int, overwrite bool) (bool, error) {
+func Download(ctx context.Context, html, title, dir string, aid int) error {
+	logger.Infof("Begin download article markdown, articleID: %d, title: %s", aid, title)
+
 	select {
 	case <-ctx.Done():
-		return false, context.Canceled
+		return context.Canceled
 	default:
 	}
 
-	fullName := path.Join(dir, filenamify.Filenamify(title)+MDExtension)
-	if files.CheckFileExists(fullName) && !overwrite {
-		return true, nil
-	}
+	markdwonFileName := path.Join(dir, filenamify.Filenamify(title)+MDExtension)
 
 	// step1: convert to md string
 	markdown, err := getDefaultConverter().ConvertString(html)
 	if err != nil {
-		return false, err
+		logger.Errorf(err, "Failed to convert article html to markdown, articleID: %d, title: %s", aid, title)
+		return err
 	}
 	// step2: download images
-	var ss = &markdownString{s: markdown}
+	ss := &markdownString{s: markdown}
 	imageURLs := findAllImages(markdown)
 
 	// images/aid/imageName.png
 	imagesFolder := filepath.Join(dir, "images", strconv.Itoa(aid))
 
 	if _, err := os.Stat(imagesFolder); errors.Is(err, os.ErrNotExist) {
-		os.MkdirAll(imagesFolder, os.ModePerm)
+		err = os.MkdirAll(imagesFolder, os.ModePerm)
+		if err != nil {
+			return err
+		}
 	}
 
 	err = writeImageFile(ctx, imageURLs, dir, imagesFolder, ss)
-
 	if err != nil {
-		return false, err
+		logger.Errorf(err, "Failed to download article images, articleID: %d, title: %s, imagesURLs: %v", aid, title, imageURLs)
+		return err
 	}
 
-	f, err := os.Create(fullName)
+	f, err := os.Create(markdwonFileName)
 	defer func() {
 		_ = f.Close()
 	}()
 	if err != nil {
-		return false, err
+		return err
 	}
 	// step3: write md file
 	_, err = f.WriteString("# " + title + "\n" + ss.s)
 	if err != nil {
-		return false, err
+		return err
 	}
-	return false, nil
+	logger.Infof("Finish download article markdown, articleID: %d, title: %s", aid, title)
+	return nil
 }
 
 func findAllImages(md string) (images []string) {
@@ -128,7 +133,6 @@ func writeImageFile(ctx context.Context,
 		headers[geektime.UserAgent] = geektime.DefaultUserAgent
 
 		_, err := downloader.DownloadFileConcurrently(ctx, imageLocalFullPath, imageURL, headers, 1)
-
 		if err != nil {
 			return err
 		}

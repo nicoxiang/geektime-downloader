@@ -1,4 +1,4 @@
-package cmd
+package ui
 
 import "github.com/chzyer/readline"
 

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	pc "github.com/nicoxiang/geektime-downloader/internal/pkg/crypto"
 )
 
@@ -19,11 +20,21 @@ var (
 	PlayAuthSign2 = []int{90, 91}
 )
 
+type PlayAuthData struct {
+	SecurityToken   string `json:"SecurityToken"`
+	AuthInfo        string `json:"AuthInfo"`
+	AccessKeyID     string `json:"AccessKeyId"`
+	AccessKeySecret string `json:"AccessKeySecret"`
+}
+
 // BuildVodGetPlayInfoURL ...
 func BuildVodGetPlayInfoURL(playAuth, videoID, clientRand string) (string, error) {
 	decodedPlayAuth := decodePlayAuth(playAuth)
-	var jsonMap map[string]string
-	json.Unmarshal([]byte(decodedPlayAuth), &jsonMap)
+	var playAuthData PlayAuthData
+	err := json.Unmarshal([]byte(decodedPlayAuth), &playAuthData)
+	if err != nil {
+		return "", err
+	}
 
 	encryptedClientRand, err := pc.RSAEncrypt([]byte(clientRand))
 	if err != nil {
@@ -31,7 +42,7 @@ func BuildVodGetPlayInfoURL(playAuth, videoID, clientRand string) (string, error
 	}
 
 	publicParams := map[string]string{}
-	publicParams["AccessKeyId"] = jsonMap["AccessKeyId"]
+	publicParams["AccessKeyId"] = playAuthData.AccessKeyID
 	publicParams["SignatureMethod"] = "HMAC-SHA1"
 	publicParams["SignatureVersion"] = "1.0"
 	publicParams["SignatureNonce"] = uuid.NewString()
@@ -44,17 +55,17 @@ func BuildVodGetPlayInfoURL(playAuth, videoID, clientRand string) (string, error
 
 	privateParams := map[string]string{}
 	privateParams["Action"] = "GetPlayInfo"
-	privateParams["AuthInfo"] = jsonMap["AuthInfo"]
+	privateParams["AuthInfo"] = playAuthData.AuthInfo
 	privateParams["AuthTimeout"] = "7200"
 	privateParams["PlayConfig"] = "{}"
 	privateParams["PlayerVersion"] = "2.8.2"
 	privateParams["ReAuthInfo"] = "{}"
-	privateParams["SecurityToken"] = jsonMap["SecurityToken"]
+	privateParams["SecurityToken"] = playAuthData.SecurityToken
 	privateParams["VideoId"] = videoID
 	allParams := getAllParams(publicParams, privateParams)
 	cqs := getCQS(allParams)
 	stringToSign := "GET" + "&" + percentEncode("/") + "&" + percentEncode(cqs)
-	accessKeySecret := jsonMap["AccessKeySecret"]
+	accessKeySecret := playAuthData.AccessKeySecret
 	signature := pc.HmacSHA1Signature(accessKeySecret, stringToSign)
 	queryString := cqs + "&Signature=" + percentEncode(signature)
 	return "https://vod.cn-shanghai.aliyuncs.com/?" + queryString, nil

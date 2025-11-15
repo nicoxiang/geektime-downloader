@@ -10,8 +10,9 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 )
 
 // Part use this struct as a channel type.
@@ -19,16 +20,46 @@ import (
 type Part struct {
 	Data  []byte
 	Index int
+	Offset int64
 }
 
 // DownloadFileConcurrently download file in chunks, return total file size
 func DownloadFileConcurrently(ctx context.Context, filepath string, url string, headers map[string]string, concurrency int) (int64, error) {
-	resp, err := http.Head(url)
+	// Use HEAD with context so it can be cancelled by parent ctx (Ctrl+C)
+	req, err := http.NewRequestWithContext(ctx, "HEAD", url, nil)
 	if err != nil {
 		return 0, err
 	}
+	// propagate headers (if any)
+	for k, v := range headers {
+		req.Header.Add(k, v)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return 0, err
+	}
+	if resp.Body != nil {
+		_ = resp.Body.Close()
+	}
 
 	fileSize, _ := strconv.ParseInt(resp.Header.Get("Content-Length"), 10, 64)
+	if fileSize <= 0 {
+		out, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o666)
+		if err != nil {
+			return 0, err
+		}
+		defer func() {
+			_ = out.Close()
+		}()
+		return fileSize, nil
+	}
+
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	if int64(concurrency) > fileSize {
+		concurrency = int(fileSize)
+	}
 
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -43,44 +74,64 @@ func DownloadFileConcurrently(ctx context.Context, filepath string, url string, 
 		})
 	}
 
+	errCh := make(chan error, 1)
 	go func() {
-		err = g.Wait()
+		err := g.Wait()
 		close(results)
+		errCh <- err
+		close(errCh)
 	}()
 
-	out, err := os.OpenFile(filepath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, os.ModePerm)
+	out, err := os.OpenFile(filepath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o666)
 	if err != nil {
 		return 0, err
 	}
-	defer out.Close()
+	removeOnError := false
+	defer func() {
+		_ = out.Close()
+		if removeOnError {
+			_ = os.Remove(filepath)
+		}
+	}()
 
-	counter := 0
-	var parts = make([][]byte, concurrency)
+	nextIndex := 0
+	pending := make(map[int]Part, concurrency)
+	var writeErr error
+
 	for part := range results {
-		counter++
-
-		parts[part.Index] = part.Data
-		if counter == concurrency {
-			break
+		if writeErr != nil {
+			continue
+		}
+		pending[part.Index] = part
+		for {
+			nextPart, ok := pending[nextIndex]
+			if !ok {
+				break
+			}
+			_, err := out.WriteAt(nextPart.Data, nextPart.Offset)
+			if err != nil {
+				writeErr = err
+				break
+			}
+			delete(pending, nextIndex)
+			nextIndex++
 		}
 	}
 
-	if err != nil {
+	if writeErr != nil {
+		removeOnError = true
+		return 0, writeErr
+	}
+
+	if err := <-errCh; err != nil {
+		removeOnError = true
 		return 0, err
-	}
-
-	for _, part := range parts {
-		_, err = out.Write(part)
-		if err != nil {
-			return 0, err
-		}
 	}
 
 	return fileSize, nil
 }
 
 func download(ctx context.Context, workers int, index int, chunkSize int64, url string, c chan Part) error {
-
 	// calculate offset by multiplying
 	// index with size
 	start := int64(index) * chunkSize
@@ -98,7 +149,6 @@ func download(ctx context.Context, workers int, index int, chunkSize int64, url 
 	}
 
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
-
 	if err != nil {
 		return err
 	}
@@ -107,21 +157,21 @@ func download(ctx context.Context, workers int, index int, chunkSize int64, url 
 
 	// fix error: http2: server sent GOAWAY and closed the connection; LastStreamID=1999
 	// error comes from io read, not request
-	err = retry(3, 700*time.Millisecond, func() error {
+	err = retry(ctx, 3, 700*time.Millisecond, func() error {
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
+		defer func() {
+			_ = resp.Body.Close()
+		}()
 		body, err := io.ReadAll(resp.Body)
-
 		if err != nil {
 			return err
 		}
-		c <- Part{Index: index, Data: body}
+		c <- Part{Index: index, Offset: start, Data: body}
 		return nil
 	})
-
 	if err != nil {
 		return err
 	}
@@ -129,10 +179,15 @@ func download(ctx context.Context, workers int, index int, chunkSize int64, url 
 	return err
 }
 
-func retry(attempts int, sleep time.Duration, f func() error) (err error) {
+func retry(ctx context.Context, attempts int, sleep time.Duration, f func() error) (err error) {
 	for i := 0; i < attempts; i++ {
 		if i > 0 {
-			time.Sleep(sleep)
+			// backoff but allow cancellation
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(sleep):
+			}
 			sleep *= 2
 
 			logger.Infof("retry hanppen, times: %s", strconv.Itoa(i))
