@@ -12,7 +12,7 @@ require (
 	github.com/go-resty/resty/v2 v2.16.2
 	github.com/google/uuid v1.6.0
 	github.com/spf13/cobra v1.8.0
-	golang.org/x/net v0.46.0
+	golang.org/x/net v0.47.0
 )
 
 require (
@@ -30,8 +30,8 @@ require (
 	github.com/mattn/go-runewidth v0.0.15 // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/stretchr/testify v1.7.1 // indirect
-	golang.org/x/sys v0.37.0 // indirect
-	golang.org/x/term v0.36.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0 // indirect
 )
 
 require (
