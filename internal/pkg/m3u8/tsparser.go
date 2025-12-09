@@ -17,10 +17,9 @@ const (
 	syncByte              byte = 0x47
 	payloadStartMask      byte = 0x40
 	atfMask               byte = 0x30
-	atfReserve            byte = 0x00
 	atfPayloadOnly        byte = 0x01
 	atfFieldOnly          byte = 0x02
-	atfFiledFollowPayload byte = 0x03
+	atfFieldFollowPayload byte = 0x03
 )
 
 // TSParser ...
@@ -41,13 +40,13 @@ type tsStream struct {
 }
 
 type tsHeader struct {
-	syncByte                   byte //8
-	transportErrorIndicator    byte //1
-	payloadUnitStartIndicator  byte //1
-	pid                        int  //13
-	transportScramblingControl byte //2
-	adaptationFiled            byte //2
-	continuityCounter          byte //4
+	syncByte                   byte // 8
+	transportErrorIndicator    byte // 1
+	payloadUnitStartIndicator  byte // 1
+	pid                        int  // 13
+	transportScramblingControl byte // 2
+	adaptationField            byte // 2
+	continuityCounter          byte // 4
 	hasError                   bool
 	isPayloadStart             bool
 	hasAdaptationFieldField    bool
@@ -55,17 +54,16 @@ type tsHeader struct {
 }
 
 type tsPacket struct {
-	header                tsHeader
-	packNo                int
-	startOffset           int
-	headerLength          int // 4
-	atfLength             int
-	pesOffset             int
-	pesHeaderLength       int
-	payloadStartOffset    int
-	payloadRelativeOffset int // 0
-	payloadLength         int // 0
-	payload               []byte
+	header             tsHeader
+	packNo             int
+	startOffset        int
+	headerLength       int // 4
+	atfLength          int
+	pesOffset          int
+	pesHeaderLength    int
+	payloadStartOffset int
+	payloadLength      int // 0
+	payload            []byte
 }
 
 func newTSPacket() *tsPacket {
@@ -87,7 +85,7 @@ func NewTSParser(data []byte, key string) *TSParser {
 	}
 }
 
-// Decrypt ...
+// Decrypt decrypt video and audio PES
 func (p *TSParser) Decrypt() []byte {
 	p.decryptPES(p.stream.data, p.stream.videos, p.stream.key)
 	p.decryptPES(p.stream.data, p.stream.audios, p.stream.key)
@@ -98,28 +96,39 @@ func (p *TSParser) decryptPES(byteBuf []byte, pesFragments []*tsPesFragment, key
 	for _, pes := range pesFragments {
 		buffer := &bytes.Buffer{}
 		for _, packet := range pes.packets {
-			if nil == packet.payload {
-				panic("payload is null")
+			if len(packet.payload) == 0 {
+				continue
 			}
 			buffer.Write(packet.payload)
 		}
-		length := buffer.Len()
+
 		all := buffer.Bytes()
-		buffer.Reset()
-		if length%16 > 0 {
-			newLength := 16 * (length / 16)
-			decrypt := crypto.AESDecryptECB(all[:newLength], key)
-			buffer.Write(decrypt)
-			buffer.Write(all[newLength:])
-		} else {
-			decrypt := crypto.AESDecryptECB(all, key)
-			buffer.Write(decrypt)
+		length := len(all)
+		if length == 0 {
+			continue
 		}
-		//Rewrite decrypted bytes to byteBuf
+
+		buffer.Reset()
+		decryptLen := (length / 16) * 16
+		if decryptLen > 0 {
+			decrypted := crypto.AESDecryptECB(all[:decryptLen], key)
+			buffer.Write(decrypted)
+		}
+		if decryptLen < length {
+			buffer.Write(all[decryptLen:])
+		}
+
+		// Rewrite decrypted bytes to byteBuf
+		bufReader := bytes.NewReader(buffer.Bytes())
 		for _, packet := range pes.packets {
-			payloadLength := packet.payloadLength
-			payloadStartOffset := packet.payloadStartOffset
-			_, _ = buffer.Read(byteBuf[payloadStartOffset : payloadStartOffset+payloadLength])
+			payloadLen := len(packet.payload)
+			if payloadLen == 0 {
+				continue
+			}
+			n, err := bufReader.Read(byteBuf[packet.payloadStartOffset : packet.payloadStartOffset+payloadLen])
+			if err != nil || n != payloadLen {
+				panic(fmt.Sprintf("decrypt write back failed, expected %d got %d", payloadLen, n))
+			}
 		}
 	}
 }
@@ -132,80 +141,96 @@ func (stream *tsStream) parseTS() {
 	byteBuf := bytes.NewReader(stream.data)
 	length := byteBuf.Len()
 	if length%packetLength != 0 {
-		panic("not a ts package")
+		panic("TS data length not multiple of 188")
 	}
-	var pes *tsPesFragment
-	packNums := length / packetLength
-	for packageNo := 0; packageNo < packNums; packageNo++ {
+
+	var pesVideo, pesAudio *tsPesFragment
+	numPackets := length / packetLength
+
+	for packNo := 0; packNo < numPackets; packNo++ {
 		buffer := make([]byte, packetLength)
 		_, _ = byteBuf.Read(buffer)
-		packet := stream.parseTSPacket(buffer, packageNo, packageNo*packetLength)
+		packet := stream.parseTSPacket(buffer, packNo, packNo*packetLength)
+
 		switch packet.header.pid {
-		// video data
-		case 0x100:
+		case 0x100: // video
 			if packet.header.isPayloadStart {
-				if nil != pes {
-					stream.videos = append(stream.videos, pes)
+				if pesVideo != nil {
+					stream.videos = append(stream.videos, pesVideo)
 				}
-				pes = new(tsPesFragment)
+				pesVideo = new(tsPesFragment)
 			}
-			pes.add(packet)
-		//audio data
-		case 0x101:
+			if pesVideo != nil {
+				pesVideo.add(packet)
+			}
+		case 0x101: // audio
 			if packet.header.isPayloadStart {
-				if nil != pes {
-					stream.audios = append(stream.audios, pes)
+				if pesAudio != nil {
+					stream.audios = append(stream.audios, pesAudio)
 				}
-				pes = new(tsPesFragment)
+				pesAudio = new(tsPesFragment)
 			}
-			pes.add(packet)
+			if pesAudio != nil {
+				pesAudio.add(packet)
+			}
 		}
 		stream.packets = append(stream.packets, packet)
+	}
+
+	if pesVideo != nil {
+		stream.videos = append(stream.videos, pesVideo)
+	}
+	if pesAudio != nil {
+		stream.audios = append(stream.audios, pesAudio)
 	}
 }
 
 func (stream *tsStream) parseTSPacket(buffer []byte, packNo, offset int) *tsPacket {
 	if buffer[0] != syncByte {
-		panic(fmt.Sprintf("Invalid ts package in :%d offset: %d", packNo, offset))
+		panic(fmt.Sprintf("Invalid ts package at %d offset %d", packNo, offset))
 	}
+
 	header := tsHeader{}
 	header.syncByte = buffer[0]
-	if buffer[1]&0x80 > 0 {
-		header.transportErrorIndicator = 1
-	}
-	if buffer[1]&payloadStartMask > 0 {
-		header.payloadUnitStartIndicator = 1
-	}
-	if buffer[1]&0x20 > 0 {
-		header.transportErrorIndicator = 1
-	}
-	header.pid = int(buffer[1]&0x1F)<<8 | int(buffer[2]&0xFF)
-	header.transportScramblingControl = ((buffer[3] & 0xC0) >> 6) & 0xFF
-	header.adaptationFiled = ((buffer[3] & atfMask) >> 4) & 0xFF
-	header.continuityCounter = (buffer[3] & 0x0F) & 0xFF
+	header.transportErrorIndicator = (buffer[1] & 0x80) >> 7
+	header.payloadUnitStartIndicator = (buffer[1] & payloadStartMask) >> 6
+	header.pid = int(buffer[1]&0x1F)<<8 | int(buffer[2])
+	header.transportScramblingControl = (buffer[3] & 0xC0) >> 6
+	header.adaptationField = (buffer[3] & atfMask) >> 4
+	header.continuityCounter = buffer[3] & 0x0F
 	header.hasError = header.transportErrorIndicator != 0
 	header.isPayloadStart = header.payloadUnitStartIndicator != 0
-	header.hasAdaptationFieldField = header.adaptationFiled == atfFieldOnly || header.adaptationFiled == atfFiledFollowPayload
-	header.hasPayload = header.adaptationFiled == atfPayloadOnly || header.adaptationFiled == atfFiledFollowPayload
+	header.hasAdaptationFieldField = header.adaptationField == atfFieldOnly || header.adaptationField == atfFieldFollowPayload
+	header.hasPayload = header.adaptationField == atfPayloadOnly || header.adaptationField == atfFieldFollowPayload
+
 	packet := newTSPacket()
 	packet.header = header
 	packet.packNo = packNo
 	packet.startOffset = offset
+
+	packet.headerLength = 4
 	if header.hasAdaptationFieldField {
-		atfLength := buffer[4] & 0xFF
-		packet.headerLength++
-		packet.atfLength = int(atfLength)
+		packet.atfLength = int(buffer[4])
+		packet.headerLength += 1 + packet.atfLength
 	}
+
+	packet.pesHeaderLength = 0
 	if header.isPayloadStart {
-		packet.pesOffset = packet.startOffset + packet.headerLength + packet.atfLength
-		// 9 bytes : 6 bytes for PES header + 3 bytes for PES extension
-		packet.pesHeaderLength = int(6 + 3 + buffer[packet.headerLength+packet.atfLength+8]&0xFF)
+		if packet.headerLength+8 < len(buffer) {
+			packet.pesHeaderLength = 6 + 3 + int(buffer[packet.headerLength+8])
+		}
+		packet.pesOffset = packet.startOffset + packet.headerLength
 	}
-	packet.payloadRelativeOffset = packet.headerLength + packet.atfLength + packet.pesHeaderLength
-	packet.payloadStartOffset = int(packet.startOffset + packet.payloadRelativeOffset)
-	packet.payloadLength = packetLength - packet.payloadRelativeOffset
+
+	packet.payloadStartOffset = packet.startOffset + packet.headerLength + packet.pesHeaderLength
+	packet.payloadLength = packetLength - packet.headerLength - packet.pesHeaderLength
+	if packet.payloadLength < 0 {
+		packet.payloadLength = 0
+	}
+
 	if packet.payloadLength > 0 {
-		packet.payload = buffer[packet.payloadRelativeOffset:packetLength]
+		packet.payload = buffer[packet.headerLength+packet.pesHeaderLength:]
 	}
+
 	return packet
 }
