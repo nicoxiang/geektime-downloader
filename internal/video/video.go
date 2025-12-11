@@ -276,21 +276,34 @@ func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte, 
 	}
 	fullPath := filepath.Join(projectDir, filenamifyTitle+TSExtension)
 	finalVideoFile, err := os.OpenFile(fullPath, os.O_APPEND|os.O_WRONLY|os.O_CREATE, os.ModePerm)
-	defer func() {
-		_ = finalVideoFile.Close()
-	}()
 	if err != nil {
 		return err
 	}
+	removeOnError := false
+	defer func() {
+		_ = finalVideoFile.Close()
+		if removeOnError {
+			_ = os.Remove(fullPath)
+		}
+	}()
 	for _, tempTSFile := range tempTSFiles {
 		f, err := os.ReadFile(filepath.Join(tempVideoDir, tempTSFile.Name()))
 		if err != nil {
+			removeOnError = true
 			return err
 		}
 
 		if isVodEncryptVideo {
-			tsParser := m3u8.NewTSParser(f, string(key))
-			f = tsParser.Decrypt()
+			tsParser, err := m3u8.NewTSParser(f, string(key))
+			if err != nil {
+				removeOnError = true
+				return err
+			}
+			f, err = tsParser.Decrypt()
+			if err != nil {
+				removeOnError = true
+				return err
+			}
 		}
 
 		// case HLSStandardEncrypt:
@@ -305,6 +318,7 @@ func mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir string, key []byte, 
 		// f = aes128
 
 		if _, err := finalVideoFile.Write(f); err != nil {
+			removeOnError = true
 			return err
 		}
 	}
