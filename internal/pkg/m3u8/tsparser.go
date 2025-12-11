@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/hex"
 	"fmt"
+	"io"
 
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/crypto"
 )
@@ -73,26 +74,35 @@ func newTSPacket() *tsPacket {
 }
 
 // NewTSParser ...
-func NewTSParser(data []byte, key string) *TSParser {
-	hexKey, _ := hex.DecodeString(key)
+func NewTSParser(data []byte, key string) (*TSParser, error) {
+	hexKey, err := hex.DecodeString(key)
+	if err != nil {
+		return nil, fmt.Errorf("decode key hex failed: %w", err)
+	}
 	stream := &tsStream{
 		data: data,
 		key:  hexKey,
 	}
-	stream.parseTS()
+	if err := stream.parseTS(); err != nil {
+		return nil, err
+	}
 	return &TSParser{
 		stream: stream,
-	}
+	}, nil
 }
 
 // Decrypt decrypt video and audio PES
-func (p *TSParser) Decrypt() []byte {
-	p.decryptPES(p.stream.data, p.stream.videos, p.stream.key)
-	p.decryptPES(p.stream.data, p.stream.audios, p.stream.key)
-	return p.stream.data
+func (p *TSParser) Decrypt() ([]byte, error) {
+	if err := p.decryptPES(p.stream.data, p.stream.videos, p.stream.key); err != nil {
+		return nil, err
+	}
+	if err := p.decryptPES(p.stream.data, p.stream.audios, p.stream.key); err != nil {
+		return nil, err
+	}
+	return p.stream.data, nil
 }
 
-func (p *TSParser) decryptPES(byteBuf []byte, pesFragments []*tsPesFragment, key []byte) {
+func (p *TSParser) decryptPES(byteBuf []byte, pesFragments []*tsPesFragment, key []byte) error {
 	for _, pes := range pesFragments {
 		buffer := &bytes.Buffer{}
 		for _, packet := range pes.packets {
@@ -127,21 +137,22 @@ func (p *TSParser) decryptPES(byteBuf []byte, pesFragments []*tsPesFragment, key
 			}
 			n, err := bufReader.Read(byteBuf[packet.payloadStartOffset : packet.payloadStartOffset+payloadLen])
 			if err != nil || n != payloadLen {
-				panic(fmt.Sprintf("decrypt write back failed, expected %d got %d", payloadLen, n))
+				return fmt.Errorf("decrypt write back failed, expected %d got %d, err: %v", payloadLen, n, err)
 			}
 		}
 	}
+	return nil
 }
 
 func (pes *tsPesFragment) add(packet *tsPacket) {
 	pes.packets = append(pes.packets, packet)
 }
 
-func (stream *tsStream) parseTS() {
+func (stream *tsStream) parseTS() error {
 	byteBuf := bytes.NewReader(stream.data)
 	length := byteBuf.Len()
 	if length%packetLength != 0 {
-		panic("TS data length not multiple of 188")
+		return fmt.Errorf("TS data length not multiple of %d", packetLength)
 	}
 
 	var pesVideo, pesAudio *tsPesFragment
@@ -149,8 +160,22 @@ func (stream *tsStream) parseTS() {
 
 	for packNo := 0; packNo < numPackets; packNo++ {
 		buffer := make([]byte, packetLength)
-		_, _ = byteBuf.Read(buffer)
-		packet := stream.parseTSPacket(buffer, packNo, packNo*packetLength)
+		n, err := io.ReadFull(byteBuf, buffer)
+		if err != nil {
+			if err == io.EOF {
+				// 数据读完，属于正常结束
+				break
+			}
+			if err == io.ErrUnexpectedEOF {
+				// 数据不足 188 字节 = TS 数据不完整
+				return fmt.Errorf("TS packet %d unexpected EOF, only %d bytes", packNo, n)
+			}
+			return fmt.Errorf("TS packet %d read error: %v", packNo, err)
+		}
+		packet, err := stream.parseTSPacket(buffer, packNo, packNo*packetLength)
+		if err != nil {
+			return err
+		}
 
 		switch packet.header.pid {
 		case 0x100: // video
@@ -183,11 +208,12 @@ func (stream *tsStream) parseTS() {
 	if pesAudio != nil {
 		stream.audios = append(stream.audios, pesAudio)
 	}
+	return nil
 }
 
-func (stream *tsStream) parseTSPacket(buffer []byte, packNo, offset int) *tsPacket {
+func (stream *tsStream) parseTSPacket(buffer []byte, packNo, offset int) (*tsPacket, error) {
 	if buffer[0] != syncByte {
-		panic(fmt.Sprintf("Invalid ts package at %d offset %d", packNo, offset))
+		return nil, fmt.Errorf("invalid ts package at %d offset %d", packNo, offset)
 	}
 
 	header := tsHeader{}
@@ -232,5 +258,5 @@ func (stream *tsStream) parseTSPacket(buffer []byte, packNo, offset int) *tsPack
 		packet.payload = buffer[packet.headerLength+packet.pesHeaderLength:]
 	}
 
-	return packet
+	return packet, nil
 }
