@@ -243,9 +243,10 @@ func (d *CourseDownloader) downloadTextArticle(article geektime.Article, columnD
 
 func (d *CourseDownloader) skipDownloadVideoArticle(article geektime.Article, columnDir string, overwrite bool) bool {
 	dir := columnDir
-	fileName := filenamify.Filenamify(article.Title) + video.TSExtension
-	fullPath := filepath.Join(dir, fileName)
-	if files.CheckFileExists(fullPath) && !overwrite {
+	baseFileName := filenamify.Filenamify(article.Title)
+	tsPath := filepath.Join(dir, baseFileName+video.TSExtension)
+	mp4Path := filepath.Join(dir, baseFileName+video.MP4Extension)
+	if !overwrite && (files.CheckFileExists(tsPath) || files.CheckFileExists(mp4Path)) {
 		return true
 	}
 	return false

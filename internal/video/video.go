@@ -22,6 +22,7 @@ import (
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/logger"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/m3u8"
 	"github.com/nicoxiang/geektime-downloader/internal/video/vod"
+	"github.com/nicoxiang/geektime-downloader/internal/pkg/ffmpeg"
 )
 
 const (
@@ -29,6 +30,8 @@ const (
 
 	// TSExtension ...
 	TSExtension = ".ts"
+	// MP4Extension ...
+	MP4Extension = ".mp4"
 )
 
 // EncryptType enum
@@ -265,6 +268,25 @@ func download(ctx context.Context,
 
 	// Read temp ts files, decrypt and merge into the one final video file
 	err = mergeTSFiles(tempVideoDir, filenamifyTitle, projectDir, decryptKey, isVodEncryptVideo)
+	if err != nil {
+		return err
+	}
+
+	// Convert merged ts file to mp4 format
+	tsFilePath := filepath.Join(projectDir, filenamifyTitle+TSExtension)
+	_, err = ffmpeg.ConvertToMP4(tsFilePath, projectDir)
+	if err != nil {
+		logger.Warnf("Failed to convert ts to mp4: %v, ts file preserved at: %s", err, tsFilePath)
+		// Return nil as ts file is still available
+		return nil
+	}
+
+	// Remove merged ts file after successful mp4 conversion
+	if removeErr := os.Remove(tsFilePath); removeErr != nil {
+		logger.Warnf("Failed to remove ts file after mp4 conversion: %v", removeErr)
+	} else {
+		logger.Infof("Removed ts file after successful mp4 conversion: %s", tsFilePath)
+	}
 
 	return
 }
