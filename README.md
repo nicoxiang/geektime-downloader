@@ -28,6 +28,92 @@ geektime-downloader 支持下载以下极客时间网站资源。
 ### Prerequisites
 
 - Chrome installed
+- FFmpeg installed（视频下载后自动从 ts 转换为 mp4 格式需要 FFmpeg）
+
+#### 安装 FFmpeg
+
+<details>
+<summary>Windows</summary>
+
+1. 前往 [FFmpeg 官网下载页](https://ffmpeg.org/download.html)，点击 Windows 图标，选择 `gyan.dev` 链接
+2. 下载 `ffmpeg-release-essentials.zip`
+3. 解压到任意目录，例如 `C:\ffmpeg`
+4. 将 FFmpeg 的 `bin` 目录添加到系统环境变量 `PATH` 中：
+   - 右键"此电脑" → 属性 → 高级系统设置 → 环境变量
+   - 在"系统变量"中找到 `Path`，点击编辑 → 新建
+   - 添加 `C:\ffmpeg\bin`（根据实际解压路径修改）
+   - 点击确定保存
+5. 打开新的命令行窗口，验证安装：
+   ```bash
+   ffmpeg -version
+   ```
+
+**或者使用包管理器安装：**
+
+```bash
+# 使用 winget
+winget install Gyan.FFmpeg
+
+# 使用 Chocolatey
+choco install ffmpeg
+
+# 使用 Scoop
+scoop install ffmpeg
+```
+
+</details>
+
+<details>
+<summary>macOS</summary>
+
+```bash
+# 使用 Homebrew（推荐）
+brew install ffmpeg
+
+# 验证安装
+ffmpeg -version
+```
+
+</details>
+
+<details>
+<summary>Linux</summary>
+
+**Ubuntu / Debian：**
+
+```bash
+sudo apt update
+sudo apt install ffmpeg
+
+# 验证安装
+ffmpeg -version
+```
+
+**CentOS / RHEL / Fedora：**
+
+```bash
+# Fedora
+sudo dnf install ffmpeg
+
+# CentOS / RHEL（需要 RPM Fusion 仓库）
+sudo yum install epel-release
+sudo yum install https://mirrors.rpmfusion.org/free/el/rpmfusion-free-release-$(rpm -E %rhel).noarch.rpm
+sudo yum install ffmpeg
+
+# 验证安装
+ffmpeg -version
+```
+
+**Arch Linux：**
+
+```bash
+sudo pacman -S ffmpeg
+
+# 验证安装
+ffmpeg -version
+```
+
+</details>
 
 ### Install form source
 
@@ -50,7 +136,7 @@ See [release page](https://github.com/nicoxiang/geektime-downloader/releases)
 ## Windows 推荐使用 Windows Terminal 打开
 
 ## cookie 方式登录
-> geektime-downloader.exe --gcid "gcid" --gcess "gcess"
+> geektime-downloader.exe --gcid "GCID" --gcess "GCESS" --output 7 --quality "hd"
 ```
 
 ### Help
@@ -70,7 +156,7 @@ Flags:
       --enterprise              是否下载企业版极客时间资源
   -f, --folder string           专栏和视频课的下载目标位置 (default "C:\\Users\\nico\\geektime-downloader")
       --gcess string            极客时间 cookie 值 gcess
-      --gcid string             极客时间 cookie 值 gcid
+      --gcid string             极客时间 cookie 值 gcid 
   -h, --help                    help for geektime-downloader
       --interval int            下载资源的间隔时间, 单位为秒, 默认1秒 (default 1)
       --log-level string        日志记录级别(debug, info, warn, error, none) (default "info")
