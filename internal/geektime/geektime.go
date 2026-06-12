@@ -190,7 +190,7 @@ func (c *Client) columnArticles(cid int) ([]Article, error) {
 			"order":  "earliest",
 			"prev":   0,
 			"sample": false,
-			"size":   500, //get all articles
+			"size":   1000, //get all articles
 		},
 		res,
 	)
