@@ -33,6 +33,7 @@ func init() {
 	rootCmd.Flags().IntVar(&cfg.PrintPDFTimeoutSeconds, "print-pdf-timeout", 60, "Chrome生成PDF的超时时间, 单位为秒, 默认60秒")
 	rootCmd.Flags().IntVar(&cfg.Interval, "interval", 1, "下载资源的间隔时间, 单位为秒, 默认1秒")
 	rootCmd.Flags().BoolVar(&cfg.IsEnterprise, "enterprise", false, "是否下载企业版极客时间资源")
+	rootCmd.Flags().BoolVar(&cfg.SkipEmbedVideo, "skip-embed-video", false, "是否跳过下载图文课程中的视频")
 	rootCmd.Flags().StringVar(&cfg.LogLevel, "log-level", "info", "日志记录级别(debug, info, warn, error, none)")
 
 	rootCmd.MarkFlagsRequiredTogether("gcid", "gcess")

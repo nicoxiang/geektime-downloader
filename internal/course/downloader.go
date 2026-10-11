@@ -194,20 +194,24 @@ func (d *CourseDownloader) downloadTextArticle(article geektime.Article, columnD
 		return err
 	}
 
-	hasVideo, videoURL := getVideoURLFromArticleContent(articleInfo.Data.ArticleContent)
-	if hasVideo && videoURL != "" {
-		if err := video.DownloadMP4(d.ctx, article.Title, columnDir, []string{videoURL}, overwrite); err != nil {
-			return err
+	if !d.cfg.SkipEmbedVideo {
+		// video exist in article content
+		hasVideo, videoURL := getVideoURLFromArticleContent(articleInfo.Data.ArticleContent)
+		if hasVideo && videoURL != "" {
+			if err := video.DownloadMP4(d.ctx, article.Title, columnDir, []string{videoURL}, overwrite); err != nil {
+				return err
+			}
 		}
-	}
 
-	if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
-		videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
-		for i, v := range articleInfo.Data.InlineVideoSubtitles {
-			videoURLs[i] = v.VideoURL
-		}
-		if err := video.DownloadMP4(d.ctx, article.Title, columnDir, videoURLs, overwrite); err != nil {
-			return err
+		// inline video
+		if len(articleInfo.Data.InlineVideoSubtitles) > 0 {
+			videoURLs := make([]string, len(articleInfo.Data.InlineVideoSubtitles))
+			for i, v := range articleInfo.Data.InlineVideoSubtitles {
+				videoURLs[i] = v.VideoURL
+			}
+			if err := video.DownloadMP4(d.ctx, article.Title, columnDir, videoURLs, overwrite); err != nil {
+				return err
+			}
 		}
 	}
 
