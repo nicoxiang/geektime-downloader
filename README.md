@@ -78,6 +78,7 @@ Flags:
       --print-pdf-timeout int   Chrome生成PDF的超时时间, 单位为秒, 默认60秒 (default 60)
       --print-pdf-wait int      Chrome生成PDF前的等待页面加载时间, 单位为秒, 默认5秒 (default 5)
   -q, --quality string          下载视频清晰度(ld标清,sd高清,hd超清) (default "sd")
+      --skip-embed-video        是否跳过下载图文课程中的视频
 ```
 
 ## Note
