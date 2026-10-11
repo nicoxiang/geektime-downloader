@@ -29,6 +29,7 @@ func RSAEncrypt(origData []byte) (string, error) {
 		return "", err
 	}
 	pub := pubInterface.(*rsa.PublicKey)
+	//nolint:staticcheck // Third-party API requires RSA PKCS#1 v1.5 encryption.
 	data, err := rsa.EncryptPKCS1v15(rand.Reader, pub, origData)
 	if err != nil {
 		return "", err
