@@ -100,9 +100,20 @@ func PrintArticlePageToPDF(parentCtx context.Context,
 	}
 	chromedp.ListenTarget(listenerCtx, listener)
 
+	deviceInfo := device.Info{
+		Name:      "Custom Device",
+		UserAgent: "Mozilla/5.0 (iPad; U; CPU OS 3_2 like Mac OS X; en-us) AppleWebKit/531.21.10 (KHTML, like Gecko) Version/4.0.4 Mobile/7B334b Safari/531.21.10",
+		Width:     834,
+		Height:    1194,
+		Scale:     2,
+		Landscape: false,
+		Mobile:    true,
+		Touch:     true,
+	}
+
 	tasks := chromedp.Tasks{
 		network.Enable(),
-		chromedp.Emulate(device.IPadPro11),
+		chromedp.Emulate(deviceInfo),
 		setCookies(cookies),
 		chromedp.Navigate(geektime.DefaultBaseURL + `/column/article/` + strconv.Itoa(aid)),
 		chromedp.Sleep(time.Duration(cfg.PrintPDFWaitSeconds) * time.Second),
@@ -149,54 +160,47 @@ func setCookies(cookies []*http.Cookie) chromedp.ActionFunc {
 func hideRedundantElements() chromedp.ActionFunc {
 	return chromedp.ActionFunc(func(ctx context.Context) error {
 		s := `
-			var headMain = document.getElementsByClassName('main')[0];
-   			if(headMain){
-      				headMain.style.display="none";
+			// 隐藏header导航栏
+			var header = document.querySelector('geek-header-mobile');
+   			if(header){
+      			header.style.display="none";
 			}
-   			var bottomWrapper = document.getElementsByClassName('sub-bottom-wrapper')[0];
-   			if(bottomWrapper){
-      				bottomWrapper.style.display="none";
-			}
-			var openAppdiv = document.getElementsByClassName('openApp')[0];
-			if(openAppdiv){
-				openAppdiv.parentNode.parentNode.parentNode.style.display="none";
-			}
+			// 隐藏播放“讲述”音频栏	
 			var audioPlayer = document.querySelector('div[class^="ColumnArticleMiniAudioPlayer"]');
 			if(audioPlayer){
 				audioPlayer.style.display="none"
 			}
-			var audioFloatBar = document.querySelector('div[class*="audio-float-bar"]');
-			if(audioFloatBar){
-				audioFloatBar.style.display="none"
-			}
+			// 隐藏“领资料”小按钮
 			var leadsWrapper = document.querySelector('div[class^="leads-wrapper"]');
 			if(leadsWrapper){
 				leadsWrapper.style.display="none";
 			}
-			var unPreviewImage = document.querySelector('img[alt="unpreview"]');
-			if(unPreviewImage){
-				unPreviewImage.style.display="none"
-			}
+			// 隐藏顶部“课程介绍”ICON
 			var gotoColumn = document.querySelector('div[class^="Index_articleColumn"]');
 			if(gotoColumn){
 				gotoColumn.style.display="none"
 			}
+			// 隐藏收藏星星ICON
 			var favBtn = document.querySelector('div[class*="Index_favBtn"]');
 			if(favBtn){
 				favBtn.style.display="none"
 			}
+			// 隐藏文末“分享给需要的人”模块
 			var likeModule = document.querySelector('div[class^="ArticleLikeModuleMobile"]');
 			if(likeModule){
 				likeModule.style.display="none"
 			}
+			// 隐藏文末“上一篇，下一篇”跳转按钮
 			var switchBtns = document.querySelector('div[class^="Index_switchBtns"]');
 			if(switchBtns){
 				switchBtns.style.display="none"
 			}
+			// 隐藏“写留言”按钮	
 			var writeComment = document.querySelector('div[class*="Index_writeComment"]');
 			if(writeComment){
 				writeComment.style.display="none"
 			}
+			// 如果留言有“展开”按钮，则点击展开	
 			var moreBtns = document.querySelectorAll('div[class^=CommentItem_more]');
 			for (let btn of moreBtns) {
 				btn.click();
