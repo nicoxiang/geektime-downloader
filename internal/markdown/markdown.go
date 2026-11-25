@@ -12,7 +12,12 @@ import (
 	"strings"
 	"sync"
 
-	md "github.com/JohannesKaufmann/html-to-markdown"
+	"github.com/JohannesKaufmann/dom"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/converter"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/base"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/commonmark"
+	"github.com/JohannesKaufmann/html-to-markdown/v2/plugin/table"
+	"golang.org/x/net/html"
 
 	"github.com/nicoxiang/geektime-downloader/internal/geektime"
 	"github.com/nicoxiang/geektime-downloader/internal/pkg/downloader"
@@ -21,8 +26,9 @@ import (
 )
 
 var (
-	converter *md.Converter
-	imgRegexp = regexp.MustCompile(`!\[(.*?)]\((.*?)\)`)
+	converterOnce sync.Once
+	conv          *converter.Converter
+	imgRegexp     = regexp.MustCompile(`!\[(.*?)]\((.*?)\)`)
 )
 
 // MDExtension ...
@@ -107,11 +113,79 @@ func findAllImages(md string) (images []string) {
 	return
 }
 
-func getDefaultConverter() *md.Converter {
-	if converter == nil {
-		converter = md.NewConverter("", true, nil)
+func getDefaultConverter() *converter.Converter {
+	converterOnce.Do(func() {
+		conv = converter.NewConverter(
+			converter.WithPlugins(
+				base.NewBasePlugin(),
+				commonmark.NewCommonmarkPlugin(),
+				table.NewTablePlugin(
+					// 极客时间文章的表格没有 <th>，首行是列标题，把它提升为表头
+					table.WithHeaderPromotion(true),
+					// 单元格内允许换行，转换为 <br />，避免整张表被跳过
+					table.WithNewlineBehavior(table.NewlineBehaviorPreserve),
+				),
+			),
+		)
+		// table 插件遇到 <ul>/<ol> 等节点会放弃整张表，
+		// 所以在预渲染阶段把表格单元格内的列表解包成普通段落
+		conv.Register.PreRenderer(unwrapListsInTables, converter.PriorityEarly)
+	})
+	return conv
+}
+
+// unwrapListsInTables 在预渲染阶段把 <table> 内部的 <ul>/<ol> 及其 <li>
+// 解包，只保留子节点。极客时间文章的表格单元格经常包含列表，
+// 而 html-to-markdown 的 table 插件遇到列表会跳过整张表。
+func unwrapListsInTables(ctx converter.Context, doc *html.Node) {
+	var walk func(n *html.Node)
+	walk = func(n *html.Node) {
+		if dom.NodeName(n) == "table" {
+			unwrapListNodes(n)
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
 	}
-	return converter
+	walk(doc)
+}
+
+// unwrapListNodes 遍历 table 子树，将 ul/ol/li 节点替换为其子节点
+func unwrapListNodes(tableNode *html.Node) {
+	var walk func(n *html.Node)
+	walk = func(n *html.Node) {
+		// 先收集 children，因为解包会修改链表
+		var children []*html.Node
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			children = append(children, c)
+		}
+		for _, c := range children {
+			walk(c)
+		}
+		name := dom.NodeName(n)
+		if name == "ul" || name == "ol" || name == "li" {
+			unwrapNode(n)
+		}
+	}
+	for c := tableNode.FirstChild; c != nil; c = c.NextSibling {
+		walk(c)
+	}
+}
+
+// unwrapNode 把节点的所有子节点移到该节点的位置，然后移除该节点
+func unwrapNode(n *html.Node) {
+	parent := n.Parent
+	if parent == nil {
+		return
+	}
+	for c := n.FirstChild; c != nil; {
+		next := c.NextSibling
+		n.RemoveChild(c)
+		parent.InsertBefore(c, n)
+		c = next
+	}
+	parent.RemoveChild(n)
 }
 
 func writeImageFile(ctx context.Context,

@@ -3,7 +3,8 @@ module github.com/nicoxiang/geektime-downloader
 go 1.26.0
 
 require (
-	github.com/JohannesKaufmann/html-to-markdown v1.5.0
+	github.com/JohannesKaufmann/dom v0.3.1
+	github.com/JohannesKaufmann/html-to-markdown/v2 v2.5.2
 	github.com/briandowns/spinner v1.23.0
 	github.com/cheggaaa/pb/v3 v3.1.5
 	github.com/chromedp/cdproto v0.0.0-20250724212937-08a3db8b4327
@@ -16,9 +17,7 @@ require (
 )
 
 require (
-	github.com/PuerkitoBio/goquery v1.8.1 // indirect
 	github.com/VividCortex/ewma v1.2.0 // indirect
-	github.com/andybalholm/cascadia v1.3.1 // indirect
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/fatih/color v1.15.0 // indirect
 	github.com/go-json-experiment/json v0.0.0-20250725192818-e39067aee2d2 // indirect
@@ -26,9 +25,9 @@ require (
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.4.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.19 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-runewidth v0.0.15 // indirect
-	github.com/rivo/uniseg v0.2.0 // indirect
+	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/stretchr/testify v1.7.1 // indirect
 	golang.org/x/sys v0.48.0 // indirect
 	golang.org/x/term v0.46.0 // indirect
